@@ -17,10 +17,12 @@ from metric import accuracy, roc_auc_compute_fn
 # from deepgcn.models import GCN
 
 from metric import accuracy
-from utils import load_citation, load_reddit_data
+from DropEdge_utils import load_citation, load_reddit_data
 from models import *
 from earlystopping import EarlyStopping
 from sample import Sampler
+
+from models.DropEdge import *
 
 # Training settings
 parser = argparse.ArgumentParser()

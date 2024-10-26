@@ -11,7 +11,7 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 from earlystopping import EarlyStopping
-from sample import Sampler
+# from sample import Sampler
 from metric import accuracy, roc_auc_compute_fn
 # from deepgcn.utils import load_data, accuracy
 # from deepgcn.models import GCN

@@ -8,7 +8,8 @@ from torch.nn.parameter import Parameter
 device = torch.device("cuda:0")
 
 
-class GCNModel(nn.Module):
+# class GCNModel(nn.Module):
+class Model(nn.Module):
     """
        The model for the single kind of deepgcn blocks.
 

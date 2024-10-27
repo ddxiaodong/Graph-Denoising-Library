@@ -8,23 +8,20 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from tensorboardX import SummaryWriter
 
-from earlystopping import EarlyStopping
+from tensorboardX import SummaryWriter
 # from sample import Sampler
-from metric import accuracy, roc_auc_compute_fn
+from utils.metric import accuracy, roc_auc_compute_fn
 # from deepgcn.utils import load_data, accuracy
 # from deepgcn.models import GCN
-
-from metric import accuracy
 from DropEdge_utils import load_citation, load_reddit_data
 import sys,os
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print(BASE)
 sys.path.insert(0, BASE) 
 from models.DropEdge import *
-from earlystopping import EarlyStopping
-from sample import Sampler
+from utils.earlystopping import EarlyStopping
+from utils.sample import Sampler
 
 from models.DropEdge import *
 

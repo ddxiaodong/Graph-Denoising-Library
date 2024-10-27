@@ -1,5 +1,5 @@
 # from data_provider.data_factory import data_provider
-from exp_basic import Exp_Basic
+from exp.exp_basic import Exp_Basic
 # from utils.tools import EarlyStopping, adjust_learning_rate, cal_accuracy
 import torch
 import torch.nn as nn
@@ -29,8 +29,8 @@ class Exp_Classification(Exp_Basic):
 
         # get labels and indexes
         self.lables, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
-        self.nfeat = self.sampler.nfeat
-        self.nclass = self.sampler.nclass
+        self.args.nfeat = self.sampler.nfeat
+        self.args.nclass = self.sampler.nclass
 
         # model init
         model = self.model_dict[self.args.model].Model(self.args).float()

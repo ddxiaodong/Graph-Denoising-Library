@@ -1,14 +1,14 @@
 import argparse
 import os
-# import torch
+import torch
 # from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
 # from exp.exp_imputation import Exp_Imputation
 # from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 # from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 # from exp.exp_classification import Exp_Classification
 # from utils.print_args import print_args
-# import random
-# import numpy as np
+import random
+import numpy as np
 from exp.exp_classification import Exp_Classification
 from exp.exp_community_detection import Exp_Community_Detection
 
@@ -16,10 +16,17 @@ from exp.exp_community_detection import Exp_Community_Detection
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='GraphDenoising')
+    # model
+    parser.add_argument('--model', type=str, default='DropEdge',
+                        help='model name, options: [DropEdge]')
+
     
-    # Training parameter 
+    
+    # Training parameter  required=true表示必传参数
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='Disables CUDA training.')
+
+    
     parser.add_argument('--fastmode', action='store_true', default=False,
                         help='Disable validation during training.')
     parser.add_argument('--seed', type=int, default=42, help='Random seed.')
@@ -38,11 +45,13 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true',
                         default=False, help="Enable the detialed training output.")
     parser.add_argument('--dataset', default="cora", help="The data set")
-    parser.add_argument('--datapath', default="data/cora", help="The data path.")
+    parser.add_argument('--datapath', default="data\cora", help="The data path.")
     parser.add_argument("--early_stopping", type=int,
                         default=0, help="The patience of earlystopping. Do not adopt the earlystopping when it equals 0.")
     parser.add_argument("--no_tensorboard", default=False, help="Disable writing logs to tensorboard")
 
+
+    parser.add_argument('--is_training', type=int, default=1, help='status')
     # Model parameter
     parser.add_argument('--type',
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
@@ -73,7 +82,17 @@ if __name__ == '__main__':
 
     parser.add_argument("--task_name", default="classification")
 
+    
 
+
+    # 实验次数
+    parser.add_argument('--itr', type=int, default=1, help='experiments times')
+    
+    # GPU
+    parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
+    parser.add_argument('--gpu', type=int, default=0, help='gpu')
+    parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
+    parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
     args = parser.parse_args()
     # pre setting
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -103,7 +122,7 @@ if __name__ == '__main__':
     elif args.task_name == 'communityDetection':
         Exp = Exp_Community_Detection
 
-    # 传入参数进行模型的实现和训练测试
+    # 传入参数进行模型的实现和训练测试(1表示需要训练  2直接测试)
     if args.is_training:
         for ii in range(args.itr):
             # setting record of experiments

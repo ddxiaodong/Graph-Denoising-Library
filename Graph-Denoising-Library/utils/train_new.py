@@ -18,7 +18,11 @@ from metric import accuracy, roc_auc_compute_fn
 
 from metric import accuracy
 from DropEdge_utils import load_citation, load_reddit_data
-from models import *
+import sys,os
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+print(BASE)
+sys.path.insert(0, BASE) 
+from models.DropEdge import *
 from earlystopping import EarlyStopping
 from sample import Sampler
 

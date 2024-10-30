@@ -32,7 +32,7 @@ class Exp_Classification(Exp_Basic):
         self.args.nfeat = self.sampler.nfeat
         self.args.nclass = self.sampler.nclass
 
-        # model init
+        # model init  参数全部来自于命令行 
         model = self.model_dict[self.args.model].Model(self.args).float()
         # convert to cuda
         if self.args.cuda:

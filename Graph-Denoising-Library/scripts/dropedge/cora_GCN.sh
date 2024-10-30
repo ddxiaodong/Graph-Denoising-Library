@@ -1,11 +1,11 @@
 #!/bin/bash
 
-python ./src/train_new.py \
+python run.py \
     --debug \
-    --datapath data// \
+    --datapath data\\cora \
     --seed 42 \
     --dataset cora \
-    --type mutigcn \
+    --model_type mutigcn \
     --nhiddenlayer 1 \
     --nbaseblocklayer 2 \
     --hidden 128 \
@@ -15,6 +15,5 @@ python ./src/train_new.py \
     --early_stopping 400 \
     --sampling_percent 0.7 \
     --dropout 0.8 \
-    --normalization FirstOrderGCN \
-     \
+    --normalization FirstOrderGCN 
     

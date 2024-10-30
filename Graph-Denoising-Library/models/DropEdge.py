@@ -2,12 +2,13 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers import *
 from torch.nn.parameter import Parameter
+from layers.DropEdge_layers import *   # 注意from后的名称
 
 device = torch.device("cuda:0")
 
-
+# nfeat nclass 数据中来  activation是传入的函数 其他参数都是命令行传入的
+# 需要self的都是在别的函数要用到的  只在init中用到的 实际上只定义变量即可
 # class GCNModel(nn.Module):
 class Model(nn.Module):
     """
@@ -20,21 +21,22 @@ class Model(nn.Module):
        All options are configurable.
     """
 
-    def __init__(self,
-                 nfeat,
-                 nhid,
-                 nclass,
-                 nhidlayer,
-                 dropout,
-                 baseblock="mutigcn",
-                 inputlayer="gcn",
-                 outputlayer="gcn",
-                 nbaselayer=0,
-                 activation=lambda x: x,
-                 withbn=True,
-                 withloop=True,
-                 aggrmethod="add",
-                 mixmode=False):
+    # def __init__(self,
+    #              nfeat,
+    #              nhid,
+    #              nclass,
+    #              nhidlayer,
+    #              dropout,
+    #              baseblock="mutigcn",
+    #              inputlayer="gcn",
+    #              outputlayer="gcn",
+    #              nbaselayer=0,
+    #              activation=lambda x: x,
+    #              withbn=True,
+    #              withloop=True,
+    #              aggrmethod="add",
+    #              mixmode=False):
+    def __init__ (self, configs, activation = lambda x : x) :
         """
         Initial function.
         :param nfeat: the input feature dimension.
@@ -53,9 +55,22 @@ class Model(nn.Module):
                            is "add", for others the default is "concat".
         :param mixmode: enable cpu-gpu mix mode. If true, put the inputlayer to cpu.
         """
-        super(GCNModel, self).__init__()
-        self.mixmode = mixmode
-        self.dropout = dropout
+        super(Model, self).__init__()
+        # super().__init__
+        nfeat = configs.nfeat
+        nhid = configs.hidden   # 注意这里名字不对应  
+        nclass = configs.nclass
+        nhidlayer = configs.nhiddenlayer
+        dropout = configs.dropout
+        baseblock = configs.model_type
+        inputlayer = configs.inputlayer,
+        outputlayer = configs.outputlayer,
+        nbaselayer = configs.nbaseblocklayer,
+        activation = F.relu,
+        withbn = configs.withbn,
+        withloop = configs.withloop,
+        aggrmethod = configs.aggrmethod,        
+        mixmode = configs.mixmode
 
         if baseblock == "resgcn":
             self.BASEBLOCK = ResGCNBlock
@@ -114,6 +129,7 @@ class Model(nn.Module):
     def reset_parameters(self):
         pass
 
+    # model(input_data) 时调用
     def forward(self, fea, adj):
         # input
         if self.mixmode:
@@ -137,30 +153,30 @@ class Model(nn.Module):
 
 
 # Modified GCN
-class GCNFlatRes(nn.Module):
-    """
-    (Legacy)
-    """
-    def __init__(self, nfeat, nhid, nclass, withbn, nreslayer, dropout, mixmode=False):
-        super(GCNFlatRes, self).__init__()
+# class GCNFlatRes(nn.Module):
+#     """
+#     (Legacy)
+#     """
+#     def __init__(self, nfeat, nhid, nclass, withbn, nreslayer, dropout, mixmode=False):
+#         super(GCNFlatRes, self).__init__()
 
-        self.nreslayer = nreslayer
-        self.dropout = dropout
-        self.ingc = GraphConvolution(nfeat, nhid, F.relu)
-        self.reslayer = GCFlatResBlock(nhid, nclass, nhid, nreslayer, dropout)
-        self.reset_parameters()
+#         self.nreslayer = nreslayer
+#         self.dropout = dropout
+#         self.ingc = GraphConvolution(nfeat, nhid, F.relu)
+#         self.reslayer = GCFlatResBlock(nhid, nclass, nhid, nreslayer, dropout)
+#         self.reset_parameters()
 
-    def reset_parameters(self):
-        # stdv = 1. / math.sqrt(self.attention.size(1))
-        # self.attention.data.uniform_(-stdv, stdv)
-        # print(self.attention)
-        pass
+#     def reset_parameters(self):
+#         # stdv = 1. / math.sqrt(self.attention.size(1))
+#         # self.attention.data.uniform_(-stdv, stdv)
+#         # print(self.attention)
+#         pass
 
-    def forward(self, input, adj):
-        x = self.ingc(input, adj)
-        x = F.dropout(x, self.dropout, training=self.training)
-        x = self.reslayer(x, adj)
-        # x = F.dropout(x, self.dropout, training=self.training)
-        return F.log_softmax(x, dim=1)
+#     def forward(self, input, adj):
+#         x = self.ingc(input, adj)
+#         x = F.dropout(x, self.dropout, training=self.training)
+#         x = self.reslayer(x, adj)
+#         # x = F.dropout(x, self.dropout, training=self.training)
+#         return F.log_softmax(x, dim=1)
 
 

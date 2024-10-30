@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--is_training', type=int, default=1, help='status')
     # Model parameter
-    parser.add_argument('--type',
+    parser.add_argument('--model_type',
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
     parser.add_argument('--inputlayer', default='gcn',
                         help="The input layer of the model.")
@@ -98,14 +98,14 @@ if __name__ == '__main__':
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     args.mixmode = args.no_cuda and args.mixmode and torch.cuda.is_available()
     if args.aggrmethod == "default":
-        if args.type == "resgcn":
+        if args.model_type == "resgcn":
             args.aggrmethod = "add"
         else:
             args.aggrmethod = "concat"
     if args.fastmode and args.early_stopping > 0:
         args.early_stopping = 0
         print("In the fast mode, early_stopping is not valid option. Setting early_stopping = 0.")
-    if args.type == "mutigcn":
+    if args.model_type == "mutigcn":
         print("For the multi-layer gcn model, the aggrmethod is fixed to nores and nhiddenlayers = 1.")
         args.nhiddenlayer = 1
         args.aggrmethod = "nores"

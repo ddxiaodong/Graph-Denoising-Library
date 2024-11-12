@@ -45,7 +45,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true',
                         default=False, help="Enable the detialed training output.")
     parser.add_argument('--dataset', default="cora", help="The data set")
-    parser.add_argument('--datapath', default="data\cora", help="The data path.")
+    parser.add_argument('--datapath', default="data/cora", help="The data path.")
     parser.add_argument("--early_stopping", type=int,
                         default=0, help="The patience of earlystopping. Do not adopt the earlystopping when it equals 0.")
     parser.add_argument("--no_tensorboard", default=False, help="Disable writing logs to tensorboard")
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     # Model parameter
     parser.add_argument('--model_type',
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
-    parser.add_argument('--inputlayer', default='gcn',
+    parser.add_argument('--inputlayer', type=str, default='gcn',
                         help="The input layer of the model.")
     parser.add_argument('--outputlayer', default='gcn',
                         help="The output layer of the model.")

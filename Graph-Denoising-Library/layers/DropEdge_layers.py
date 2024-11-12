@@ -134,6 +134,8 @@ class GraphBaseBlock(Module):
 
     def __makehidden(self):
         # for i in xrange(self.nhiddenlayer):
+        print(type(self.nhiddenlayer), self.nhiddenlayer)
+
         for i in range(self.nhiddenlayer):
             if i == 0:
                 layer = GraphConvolutionBS(self.in_features, self.hiddendim, self.activation, self.withbn,

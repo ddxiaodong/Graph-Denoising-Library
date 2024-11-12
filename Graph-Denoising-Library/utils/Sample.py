@@ -7,7 +7,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print(BASE)
 sys.path.insert(0, BASE) 
 from utils.DropEdge_utils import data_loader, sparse_mx_to_torch_sparse_tensor
-from utils.normalization import fetch_normalization
+from utils.Normalization import fetch_normalization
 
 class Sampler:
     """Sampling the input graph data."""

@@ -1,4 +1,4 @@
 
-from bb import * 
-
-print(1)
+import torch
+print(torch.__version__)
+print(torch.cuda.is_available())

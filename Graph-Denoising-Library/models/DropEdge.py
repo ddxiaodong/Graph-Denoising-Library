@@ -60,17 +60,20 @@ class Model(nn.Module):
         nfeat = configs.nfeat
         nhid = configs.hidden   # 注意这里名字不对应  
         nclass = configs.nclass
+        nbaselayer = configs.nbaseblocklayer,
         nhidlayer = configs.nhiddenlayer
         dropout = configs.dropout
         baseblock = configs.model_type
+        print(type(configs.inputlayer))
+        print(configs.inputlayer)
         inputlayer = configs.inputlayer,
         outputlayer = configs.outputlayer,
-        nbaselayer = configs.nbaseblocklayer,
+
         activation = F.relu,
         withbn = configs.withbn,
         withloop = configs.withloop,
         aggrmethod = configs.aggrmethod,        
-        mixmode = configs.mixmode
+        self.mixmode = configs.mixmode
 
         if baseblock == "resgcn":
             self.BASEBLOCK = ResGCNBlock
@@ -122,7 +125,7 @@ class Model(nn.Module):
         self.outgc = GraphConvolutionBS(baseblockinput, nclass, outactivation, withbn, withloop)
 
         self.reset_parameters()
-        if mixmode:
+        if self.mixmode:
             self.midlayer = self.midlayer.to(device)
             self.outgc = self.outgc.to(device)
 

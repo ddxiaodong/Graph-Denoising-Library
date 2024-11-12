@@ -16,5 +16,5 @@ python -u run.py \
     --sampling_percent 0.7 \
     --dropout 0.8 \
     --use_gpu false \
-    --normalization FirstOrderGCN 
-    
+    --normalization FirstOrderGCN
+

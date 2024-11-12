@@ -10,8 +10,9 @@ import warnings
 import numpy as np
 import pdb
 
-from utils.sample import Sampler
-from utils.earlystopping import EarlyStopping
+
+from utils.Sample import Sampler
+from utils.EarlyStopping import EarlyStopping
 import torch.nn.functional as F
 from utils.metric import accuracy, roc_auc_compute_fn
 
@@ -37,8 +38,9 @@ class Exp_Classification(Exp_Basic):
         # convert to cuda
         if self.args.cuda:
             model.cuda()
-        self.model_optim = self._select_optimizer()
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+        # 下面这里会报错  因为调用_select_optimizer方法时 model尚未返回 需要在train中调用方法定义优化器
+        # self.model_optim = self._select_optimizer()
+        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
         
         # For the mix mode, lables and indexes are in cuda. 
         if self.args.cuda or self.args.mixmode:
@@ -93,6 +95,8 @@ class Exp_Classification(Exp_Basic):
 
         sampling_t = 0
         model_optim = self._select_optimizer()
+        scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+
         for epoch in range(self.args.epochs):
             input_idx_train = self.idx_train
             sampling_t = time.time()
@@ -104,7 +108,10 @@ class Exp_Classification(Exp_Basic):
                 train_adj = train_adj.cuda()
 
             sampling_t = time.time() - sampling_t
-            
+            (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+            if self.args.mixmode:
+                val_adj = val_adj.cuda()
+
             # 下面分if else训练 把公共部分提到前面来
             if val_adj is None:
                 val_adj = train_adj
@@ -160,7 +167,7 @@ class Exp_Classification(Exp_Basic):
                 acc_val = 0
 
             if self.args.lradjust:
-                self.scheduler.step()
+                scheduler.step()
 
             val_t = time.time() - val_t
             

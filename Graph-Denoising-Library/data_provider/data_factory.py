@@ -33,6 +33,7 @@ def load_citation(dataset_str="cora", normalization="AugNormAdj", porting_to_tor
     test_idx_range = np.sort(test_idx_reorder)
 
     if dataset_str == 'citeseer':
+        print()
         # Fix citeseer dataset (there are some isolated nodes in the graph)
         # Find isolated nodes, add them as zero-vecs into the right position
         test_idx_range_full = range(min(test_idx_reorder), max(test_idx_reorder ) +1)

@@ -6,14 +6,23 @@ import sys,os
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print(BASE)
 sys.path.insert(0, BASE) 
-from utils.DropEdge_utils import data_loader, sparse_mx_to_torch_sparse_tensor
+from utils.DropEdge_utils import sparse_mx_to_torch_sparse_tensor
+from data_provider.data_factory import data_loader
 from utils.Normalization import fetch_normalization
 
+# 用于采样图数据的类。
+
+'''
+    通过不同采样方式生成子图数据
+    动态数据生成（随机删除节点或边）和归一化策略
+    支持传导式和归纳式学习。支持两种不同的学习范式
+'''
 class Sampler:
     """Sampling the input graph data."""
     def __init__(self, dataset, data_path="data", task_type="full"):
         self.dataset = dataset
         self.data_path = data_path
+        # 加载数据
         (self.adj,
          self.train_adj,
          self.features,
@@ -63,6 +72,7 @@ class Sampler:
         else:
             return fea
 
+    # 默认采样方法。直接返回全部训练数据
     def stub_sampler(self, normalization, cuda):
         """
         The stub sampler. Return the original data. 
@@ -75,6 +85,7 @@ class Sampler:
         fea = self._preprocess_fea(self.train_features, cuda)
         return r_adj, fea
 
+    # 随机删除一定比例的边。仅保留指定百分比的边
     def randomedge_sampler(self, percent, normalization, cuda):
         """
         Randomly drop edge and preserve percent% edges.
@@ -95,6 +106,7 @@ class Sampler:
         fea = self._preprocess_fea(self.train_features, cuda)
         return r_adj, fea
 
+    # 随机删除一定比例的节点。对正样本节点和负样本节点进行独立采样
     def vertex_sampler(self, percent, normalization, cuda):
         """
         Randomly drop vertexes.
@@ -125,6 +137,7 @@ class Sampler:
         r_fea = self._preprocess_fea(r_fea, cuda)
         return r_adj, r_fea, all_samples
 
+    # 根据节点的度信息随机删除边，高度节点删除概率更高
     def degree_sampler(self, percent, normalization, cuda):
         """
         Randomly drop edge wrt degree (high degree, low probility).
@@ -146,7 +159,7 @@ class Sampler:
         fea = self._preprocess_fea(self.train_features, cuda)
         return r_adj, fea
 
-
+    # 提供测试集的邻接矩阵和特征矩阵
     def get_test_set(self, normalization, cuda):
         """
         Return the test set. 
@@ -169,6 +182,7 @@ class Sampler:
         """
         return self.get_test_set(normalization, cuda)
 
+    # 获取标签和索引
     def get_label_and_idxes(self, cuda):
         """
         Return all labels and indexes.

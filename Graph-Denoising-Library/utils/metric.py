@@ -2,7 +2,10 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 
-
+# 负责存放相关的指标 包括三大任务的评价指标和中间指标
+# 节点分类： 准确率。 f1分数。     召回率、精确率、平均精度、
+# 社团检测： 监督指标 NMI   非监督指标 模块度Q
+# 链路预测： 准确率
 def encode_onehot(labels):
     classes = set(labels)
     classes_dict = {c: np.identity(len(classes))[i, :] for i, c in

@@ -9,8 +9,7 @@ import time
 import warnings
 import numpy as np
 import pdb
-
-
+from data_provider.data_factory import data_loader
 from utils.Sample import Sampler
 from utils.EarlyStopping import EarlyStopping
 import torch.nn.functional as F
@@ -25,8 +24,10 @@ class Exp_Classification(Exp_Basic):
     # 模型构建 这个方法在Basic类的init方法中调用
     def _build_model(self):
         # 设置采样器（这里采样器是dropedge的）
+        # 这部分逻辑应该挪到非通用模块
         self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
 
+        #todo  这里应该先加载数据。后面逻辑不变
         # get labels and indexes
         self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
         self.args.nfeat = self.sampler.nfeat
@@ -47,7 +48,7 @@ class Exp_Classification(Exp_Basic):
             self.idx_train = self.idx_train.cuda()
             self.idx_val = self.idx_val.cuda()
             self.idx_test = self.idx_test.cuda()
-
+        #
         if self.args.warm_start is not None and self.args.warm_start != "":
             self.early_stopping = EarlyStopping(fname=self.args.warm_start, verbose=False)
             print("Restore checkpoint from %s" % (self.early_stopping.fname))
@@ -81,14 +82,16 @@ class Exp_Classification(Exp_Basic):
         for param_group in optimizer.param_groups:
             return param_group['lr']
 
+    def _get_data(self, flag):
+        data_set, data_loader = data_loader(self.args, flag)
+        return data_set, data_loader
+
 
 
     # 训练过程 基本取材于dropedge  后续需要修改成通用的格式
     def train(self):
         # Train model
         t_total = time.time()
-
-
         sampling_t = 0
         model_optim = self._select_optimizer()
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
@@ -130,6 +133,7 @@ class Exp_Classification(Exp_Basic):
             self.model.train()
             model_optim.zero_grad()
             # EXP——classification只用于模型创建、训练和测试框架的撰写。具体还要在具体模型中farward中实现
+
             output = self.model(train_fea, train_adj)
             # special for reddit
             if self.sampler.learning_type == "inductive":

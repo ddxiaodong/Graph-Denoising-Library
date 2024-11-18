@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from layers.DropEdge_layers import *   # 注意from后的名称
-
 device = torch.device("cuda:0")
 
 # nfeat nclass 数据中来  activation是传入的函数 其他参数都是命令行传入的
@@ -57,22 +56,21 @@ class Model(nn.Module):
         """
         super(Model, self).__init__()
         # super().__init__
+        # 后文中用得到的属性就加self. 用不到就直接用名字
         nfeat = configs.nfeat
         nhid = configs.hidden   # 注意这里名字不对应  
         nclass = configs.nclass
-        nbaselayer = configs.nbaseblocklayer,
+        nbaselayer = configs.nbaseblocklayer   # 这里不能加逗号  否则会被识别为元组
         nhidlayer = configs.nhiddenlayer
-        dropout = configs.dropout
+        self.dropout = configs.dropout
         baseblock = configs.model_type
-        print(type(configs.inputlayer))
-        print(configs.inputlayer)
-        inputlayer = configs.inputlayer,
-        outputlayer = configs.outputlayer,
+        inputlayer = configs.inputlayer
+        outputlayer = configs.outputlayer
 
-        activation = F.relu,
-        withbn = configs.withbn,
-        withloop = configs.withloop,
-        aggrmethod = configs.aggrmethod,        
+        activation = F.relu
+        withbn = configs.withbn
+        withloop = configs.withloop
+        aggrmethod = configs.aggrmethod
         self.mixmode = configs.mixmode
 
         if baseblock == "resgcn":
@@ -115,7 +113,7 @@ class Model(nn.Module):
                                  withbn=withbn,
                                  withloop=withloop,
                                  activation=activation,
-                                 dropout=dropout,
+                                 dropout=configs.dropout,
                                  dense=False,
                                  aggrmethod=aggrmethod)
             self.midlayer.append(gcb)
@@ -156,30 +154,30 @@ class Model(nn.Module):
 
 
 # Modified GCN
-# class GCNFlatRes(nn.Module):
-#     """
-#     (Legacy)
-#     """
-#     def __init__(self, nfeat, nhid, nclass, withbn, nreslayer, dropout, mixmode=False):
-#         super(GCNFlatRes, self).__init__()
+class GCNFlatRes(nn.Module):
+    """
+    (Legacy)
+    """
+    def __init__(self, nfeat, nhid, nclass, withbn, nreslayer, dropout, mixmode=False):
+        super(GCNFlatRes, self).__init__()
 
-#         self.nreslayer = nreslayer
-#         self.dropout = dropout
-#         self.ingc = GraphConvolution(nfeat, nhid, F.relu)
-#         self.reslayer = GCFlatResBlock(nhid, nclass, nhid, nreslayer, dropout)
-#         self.reset_parameters()
+        self.nreslayer = nreslayer
+        self.dropout = dropout
+        self.ingc = GraphConvolution(nfeat, nhid, F.relu)
+        self.reslayer = GCFlatResBlock(nhid, nclass, nhid, nreslayer, dropout)
+        self.reset_parameters()
 
-#     def reset_parameters(self):
-#         # stdv = 1. / math.sqrt(self.attention.size(1))
-#         # self.attention.data.uniform_(-stdv, stdv)
-#         # print(self.attention)
-#         pass
+    def reset_parameters(self):
+        # stdv = 1. / math.sqrt(self.attention.size(1))
+        # self.attention.data.uniform_(-stdv, stdv)
+        # print(self.attention)
+        pass
 
-#     def forward(self, input, adj):
-#         x = self.ingc(input, adj)
-#         x = F.dropout(x, self.dropout, training=self.training)
-#         x = self.reslayer(x, adj)
-#         # x = F.dropout(x, self.dropout, training=self.training)
-#         return F.log_softmax(x, dim=1)
+    def forward(self, input, adj):
+        x = self.ingc(input, adj)
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.reslayer(x, adj)
+        # x = F.dropout(x, self.dropout, training=self.training)
+        return F.log_softmax(x, dim=1)
 
 

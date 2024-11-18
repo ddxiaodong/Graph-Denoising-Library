@@ -16,7 +16,7 @@ from exp.exp_community_detection import Exp_Community_Detection
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='GraphDenoising')
-    # model
+    # model name
     parser.add_argument('--model', type=str, default='DropEdge',
                         help='model name, options: [DropEdge]')
 
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_cuda', action='store_true', default=False,
                         help='Disables CUDA training.')
 
-    
+    # todo 需要搞清楚下列训练参数意义
     parser.add_argument('--fastmode', action='store_true', default=False,
                         help='Disable validation during training.')
     parser.add_argument('--seed', type=int, default=42, help='Random seed.')
@@ -52,8 +52,9 @@ if __name__ == '__main__':
 
 
     parser.add_argument('--is_training', type=int, default=1, help='status')
-    # Model parameter
-    parser.add_argument('--model_type',
+    # Model parameter 针对不同模型 有不同的模型参数 尽量设定一个默认值
+    # 尽量是双引号
+    parser.add_argument('--model_type', default="mutigcn",
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
     parser.add_argument('--inputlayer', type=str, default='gcn',
                         help="The input layer of the model.")
@@ -97,6 +98,7 @@ if __name__ == '__main__':
     # pre setting
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     args.mixmode = args.no_cuda and args.mixmode and torch.cuda.is_available()
+    # 以下属于dropedge的特定操作 应该转移到dropedge中
     if args.aggrmethod == "default":
         if args.model_type == "resgcn":
             args.aggrmethod = "add"
@@ -124,9 +126,9 @@ if __name__ == '__main__':
 
     # 传入参数进行模型的实现和训练测试(1表示需要训练  2直接测试)
     if args.is_training:
-        for ii in range(args.itr):
+        for ii in range(args.itr): # 根据实验次数进行实验
             # setting record of experiments
-            exp = Exp(args)  # set experiments
+            exp = Exp(args)  # set experiments 传入命令行参数
 
             exp.train()
             exp.test()

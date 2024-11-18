@@ -18,22 +18,21 @@ from utils.metric import accuracy, roc_auc_compute_fn
 
 warnings.filterwarnings('ignore')
 
-
+# 节点分类实验类  在类中定义的实例方法，它应该至少接受 self 作为第一个参数
 class Exp_Classification(Exp_Basic):
     def __init__(self, args):
         super(Exp_Classification, self).__init__(args)
-
+    # 模型构建 这个方法在Basic类的init方法中调用
     def _build_model(self):
-        # 添加参数
-        # should we need fix random seed here?
+        # 设置采样器（这里采样器是dropedge的）
         self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
 
         # get labels and indexes
-        self.lables, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
+        self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
         self.args.nfeat = self.sampler.nfeat
         self.args.nclass = self.sampler.nclass
 
-        # model init  参数全部来自于命令行 
+        # model初始化 传入模型名 这里是利用父类的 model_dict
         model = self.model_dict[self.args.model].Model(self.args).float()
         # convert to cuda
         if self.args.cuda:
@@ -77,21 +76,18 @@ class Exp_Classification(Exp_Basic):
         # model_optim = optim.RAdam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
     
-    
-    def _get_lr(optimizer):
+    # 获取给定优化器的学习率
+    def _get_lr(self, optimizer):
         for param_group in optimizer.param_groups:
             return param_group['lr']
 
 
 
-    # define the training function.
+    # 训练过程 基本取材于dropedge  后续需要修改成通用的格式
     def train(self):
         # Train model
         t_total = time.time()
-        loss_train = np.zeros((self.args.epochs,))
-        acc_train = np.zeros((self.args.epochs,))
-        loss_val = np.zeros((self.args.epochs,))
-        acc_val = np.zeros((self.args.epochs,))
+
 
         sampling_t = 0
         model_optim = self._select_optimizer()
@@ -133,6 +129,7 @@ class Exp_Classification(Exp_Basic):
             t = time.time()
             self.model.train()
             model_optim.zero_grad()
+            # EXP——classification只用于模型创建、训练和测试框架的撰写。具体还要在具体模型中farward中实现
             output = self.model(train_fea, train_adj)
             # special for reddit
             if self.sampler.learning_type == "inductive":
@@ -170,7 +167,7 @@ class Exp_Classification(Exp_Basic):
                 scheduler.step()
 
             val_t = time.time() - val_t
-            
+
             # return (loss_train.item(), acc_train.item(), loss_val, acc_val, get_lr(optimizer), train_t, val_t)
             outputs = (loss_train.item(), acc_train.item(), loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
             if self.args.debug and epoch % 1 == 0:
@@ -189,10 +186,13 @@ class Exp_Classification(Exp_Basic):
             #     tb_writer.add_scalars('Accuracy', {'train': outputs[1], 'val': outputs[3]}, epoch)
             #     tb_writer.add_scalar('lr', outputs[4], epoch)
             #     tb_writer.add_scalars('Time', {'train': outputs[5], 'val': outputs[6]}, epoch)
-                
 
-            loss_train[epoch], acc_train[epoch], loss_val[epoch], acc_val[epoch] = outputs[0], outputs[1], outputs[2], outputs[
-                3]
+            loss_train = np.zeros((self.args.epochs,))
+            acc_train = np.zeros((self.args.epochs,))
+            loss_val = np.zeros((self.args.epochs,))
+            acc_val = np.zeros((self.args.epochs,))
+
+            loss_train[epoch], acc_train[epoch], loss_val[epoch], acc_val[epoch] = outputs[0], outputs[1], outputs[2], outputs[3]
 
             if self.args.early_stopping > 0 and self.early_stopping.early_stop:
                 print("Early stopping.")

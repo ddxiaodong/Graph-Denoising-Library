@@ -24,7 +24,7 @@ class Exp_Classification(Exp_Basic):
     # 模型构建 这个方法在Basic类的init方法中调用
     def _build_model(self):
         # 获取训练和测试数据 得到的是一个字典
-        self.dataset = self._get_data()
+        self.dataset = self._get_data("train")
         # 是dropedge使用采样器获取数据
         if self.args.model == "dropedge" :
             # get labels and indexes

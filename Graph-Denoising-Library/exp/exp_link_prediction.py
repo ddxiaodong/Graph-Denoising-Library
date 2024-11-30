@@ -105,7 +105,7 @@ class Exp_Link_Prediction(Exp_Basic):
             if self.args.mixmode:
                 val_adj = val_adj.cuda()
 
-            if sampler.learning_type == "transductive":
+            # if sampler.learning_type == "transductive":
             if False:
                 outputs = train(epoch, train_adj, train_fea, input_idx_train)  # TODO 这一块先不处理
             else:
@@ -119,7 +119,7 @@ class Exp_Link_Prediction(Exp_Basic):
             model_optim.zero_grad()
             # EXP——classification只用于模型创建、训练和测试框架的撰写。具体还要在具体模型中farward中实现
 
-            output = self.model(, )
+            # output = self.model(, )
             # special for reddit
             if self.sampler.learning_type == "inductive":
                 loss_train = F.nll_loss(output, self.labels[self.idx_train])
@@ -197,7 +197,7 @@ class Exp_Link_Prediction(Exp_Basic):
             print("Optimization Finished!")
             print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
-    test用到的 sampler idx_test labels
+#    test用到的 sampler idx_test labels
     def test(self):
         # 取测试adj和fea矩阵
         (test_adj, test_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)

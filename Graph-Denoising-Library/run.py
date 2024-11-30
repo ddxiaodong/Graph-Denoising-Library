@@ -1,17 +1,11 @@
 import argparse
 import os
 import torch
-# from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
-# from exp.exp_imputation import Exp_Imputation
-# from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
-# from exp.exp_anomaly_detection import Exp_Anomaly_Detection
-# from exp.exp_classification import Exp_Classification
-# from utils.print_args import print_args
 import random
 import numpy as np
 from exp.exp_classification import Exp_Classification
 from exp.exp_community_detection import Exp_Community_Detection
-
+from exp.exp_link_prediction import Exp_Link_Prediction
 
 if __name__ == '__main__':
 
@@ -44,6 +38,7 @@ if __name__ == '__main__':
                         help="The model name to be loaded for warm start.")
     parser.add_argument('--debug', action='store_true',
                         default=False, help="Enable the detialed training output.")
+    # 数据集
     parser.add_argument('--dataset', default="cora", help="The data set")
     parser.add_argument('--datapath', default="data/cora", help="The data path.")
     parser.add_argument("--early_stopping", type=int,
@@ -54,6 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--is_training', type=int, default=1, help='status')
     # Model parameter 针对不同模型 有不同的模型参数 尽量设定一个默认值
     # 尽量是双引号
+    # Dropedge参数
     parser.add_argument('--model_type', default="mutigcn",
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
     parser.add_argument('--inputlayer', type=str, default='gcn',
@@ -79,11 +75,21 @@ if __name__ == '__main__':
                         help="The number of layers in each baseblock")
     parser.add_argument("--aggrmethod", default="default",
                         help="The aggrmethod for the layer aggreation. The options includes add and concat. Only valid in resgcn, densegcn and inecptiongcn")
+
     parser.add_argument("--task_type", default="full", help="The node classification task type (full and semi). Only valid for cora, citeseer and pubmed dataset.")
 
     parser.add_argument("--task_name", default="classification")
 
-    
+    # RGIB 的特定参数
+    parser.add_argument('--noise_type', type=str, default='mixed')
+    parser.add_argument('--gnn_model', type=str, default='GCN')
+    parser.add_argument('--num_gnn_layers', type=int, default=4)
+    parser.add_argument('--noise_ratio', type=float, default=0.4)
+    parser.add_argument('--scheduler', type=str, default='linear')
+    parser.add_argument('--scheduler_param', type=float, default=1.0)
+    parser.add_argument('--search_scheduler',  action='store_true')
+    parser.add_argument('--search_iteration', type=int, default=0)
+
 
 
     # 实验次数
@@ -98,7 +104,7 @@ if __name__ == '__main__':
     # pre setting
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     args.mixmode = args.no_cuda and args.mixmode and torch.cuda.is_available()
-    # 以下属于dropedge的特定操作 应该转移到dropedge中
+    # 以下属于dropedge的特定操作 但作为命令行参数其实可以允许有冗余部分
     if args.aggrmethod == "default":
         if args.model_type == "resgcn":
             args.aggrmethod = "add"
@@ -123,6 +129,8 @@ if __name__ == '__main__':
         Exp = Exp_Classification
     elif args.task_name == 'communityDetection':
         Exp = Exp_Community_Detection
+    elif args.task_name == 'linkPrediction':
+        Exp = Exp_Link_Prediction
 
     # 传入参数进行模型的实现和训练测试(1表示需要训练  2直接测试)
     if args.is_training:
@@ -132,7 +140,7 @@ if __name__ == '__main__':
 
             exp.train()
             exp.test()
-            torch.cuda.empty_cache()  
+            torch.cuda.empty_cache()
 
 
 

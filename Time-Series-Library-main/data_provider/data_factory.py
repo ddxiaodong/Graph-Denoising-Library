@@ -3,6 +3,7 @@ from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Data
 from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
 
+# 这里写好了所有支持的数据集名称
 data_dict = {
     'ETTh1': Dataset_ETT_hour,
     'ETTh2': Dataset_ETT_hour,
@@ -27,7 +28,7 @@ def data_provider(args, flag):
     drop_last = False
     batch_size = args.batch_size
     freq = args.freq
-
+    # 根据任务类型有不同的数据加载方式
     if args.task_name == 'anomaly_detection':
         drop_last = False
         data_set = Data(

@@ -23,16 +23,19 @@ class Exp_Classification(Exp_Basic):
         super(Exp_Classification, self).__init__(args)
     # 模型构建 这个方法在Basic类的init方法中调用
     def _build_model(self):
-        # 设置采样器（这里采样器是dropedge的）
-        # 这部分逻辑应该挪到非通用模块
-        self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
-
-        #todo  这里应该先加载数据。后面逻辑不变
-        # get labels and indexes
-        self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
-        self.args.nfeat = self.sampler.nfeat
-        self.args.nclass = self.sampler.nclass
-
+        # 获取训练和测试数据 得到的是一个字典
+        self.dataset = self._get_data()
+        # 是dropedge使用采样器获取数据
+        if self.args.model == "dropedge" :
+            # get labels and indexes
+            self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
+            self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
+            self.args.nfeat = self.sampler.nfeat
+            self.args.nclass = self.sampler.nclass
+        else :
+            self.labels, self.idx_train, self.idx_val, self.idx_test = self.dataset["labels"], self.dataset["idx_train"], self.dataset["idx_val"], self.dataset["idx_test"]
+            self.args.nfeat = self.dataset["features"].shape[1]
+            self.args.nclass = int(self.dataset["labels"].max().item() + 1)
         # model初始化 传入模型名 这里是利用父类的 model_dict
         model = self.model_dict[self.args.model].Model(self.args).float()
         # convert to cuda
@@ -42,13 +45,13 @@ class Exp_Classification(Exp_Basic):
         # self.model_optim = self._select_optimizer()
         # self.scheduler = optim.lr_scheduler.MultiStepLR(self.model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
         
-        # For the mix mode, lables and indexes are in cuda. 
+        # 放cuda上训练
         if self.args.cuda or self.args.mixmode:
             self.labels = self.labels.cuda()
             self.idx_train = self.idx_train.cuda()
             self.idx_val = self.idx_val.cuda()
             self.idx_test = self.idx_test.cuda()
-        #
+        # set warm_start
         if self.args.warm_start is not None and self.args.warm_start != "":
             self.early_stopping = EarlyStopping(fname=self.args.warm_start, verbose=False)
             print("Restore checkpoint from %s" % (self.early_stopping.fname))
@@ -59,6 +62,7 @@ class Exp_Classification(Exp_Basic):
             self.early_stopping = EarlyStopping(patience=self.args.early_stopping, verbose=False)
             print("Model is saving to: %s" % (self.early_stopping.fname))
 
+        # 使用tensorboard查看结果
         # if self.args.no_tensorboard is False:
         #     tb_writer = SummaryWriter(
         #         comment=f"-dataset_{self.args.dataset}-type_{self.args.type}"
@@ -66,9 +70,6 @@ class Exp_Classification(Exp_Basic):
         
         return model
 
-    # def _get_data(self, flag):
-    #     data_set, data_loader = data_provider(self.args, flag)
-    #     return data_set, data_loader
 
     def _select_optimizer(self):
         # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
@@ -82,32 +83,40 @@ class Exp_Classification(Exp_Basic):
         for param_group in optimizer.param_groups:
             return param_group['lr']
 
+    # 传入命令行参数 获取数据集字典 flag 为了区分训练测试等 预设参数
     def _get_data(self, flag):
-        data_set, data_loader = data_loader(self.args, flag)
-        return data_set, data_loader
+        return data_loader(self.args)
 
-
-
-    # 训练过程 基本取材于dropedge  后续需要修改成通用的格式
     def train(self):
         # Train model
         t_total = time.time()
         sampling_t = 0
         model_optim = self._select_optimizer()
+        # 学习率调度器 用于动态调整优化器的学习率 milestones表示到这些训练epoch时，调整学习率 gamma表示到达一个milestones时 学习率乘以0.5
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
 
         for epoch in range(self.args.epochs):
             input_idx_train = self.idx_train
             sampling_t = time.time()
             # no sampling
+
+
             # randomedge sampling if args.sampling_percent >= 1.0, it behaves the same as stub_sampler.
-            (train_adj, train_fea) = self.sampler.randomedge_sampler(percent=self.args.sampling_percent, normalization=self.args.normalization,
+            if (self.args.model == "dropedge") :
+                (train_adj, train_fea) = self.sampler.randomedge_sampler(percent=self.args.sampling_percent, normalization=self.args.normalization,
                                                                 cuda=self.args.cuda)
+            else :
+                (train_adj, train_fea) = self.dataset["train_adj"], self.dataset["train_features"]
+
             if self.args.mixmode:
                 train_adj = train_adj.cuda()
 
             sampling_t = time.time() - sampling_t
-            (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+            if (self.args.model == 'DropEdge'):
+                (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+            else :
+                (val_adj, val_fea) = self.dataset["val_adj"], self.dataset["val_features"]
+
             if self.args.mixmode:
                 val_adj = val_adj.cuda()
 
@@ -132,20 +141,24 @@ class Exp_Classification(Exp_Basic):
             t = time.time()
             self.model.train()
             model_optim.zero_grad()
-            # EXP——classification只用于模型创建、训练和测试框架的撰写。具体还要在具体模型中farward中实现
-
+            # 输入特征矩阵和邻接矩阵 后续增加模型
             output = self.model(train_fea, train_adj)
-            # special for reddit
+            # 如果是归纳学习 直接基于整个输出output和对应标签计算损失
             if self.sampler.learning_type == "inductive":
+                # 负对数似然损失函数 常用于分类任务
                 loss_train = F.nll_loss(output, self.labels[self.idx_train])
                 acc_train = accuracy(output, self.labels[self.idx_train])
+            # 其他类型学习只使用训练集索引部分预测值和对应标签计算损失
             else:
                 loss_train = F.nll_loss(output[self.idx_train], self.labels[self.idx_train])
                 acc_train = accuracy(output[self.idx_train], self.labels[self.idx_train])
-
+            # 损失反向传播
             loss_train.backward()
+            # 优化器更新参数
             model_optim.step()
+            # 记录训练时间
             train_t = time.time() - t
+            # 记录验证开始时间
             val_t = time.time()
             # We can not apply the fastmode for the reddit dataset.
             # if sampler.learning_type == "inductive" or not args.fastmode:
@@ -173,6 +186,7 @@ class Exp_Classification(Exp_Basic):
             val_t = time.time() - val_t
 
             # return (loss_train.item(), acc_train.item(), loss_val, acc_val, get_lr(optimizer), train_t, val_t)
+            # 这里的outputs仅用于接受变量 没实质作用 后续修改打印信息时只需改这里和打印部分就行
             outputs = (loss_train.item(), acc_train.item(), loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
             if self.args.debug and epoch % 1 == 0:
                 print('Epoch: {:04d}'.format(epoch + 1),
@@ -214,12 +228,17 @@ class Exp_Classification(Exp_Basic):
             
     # test用到的 sampler idx_test labels 
     def test(self):
-        # 取测试adj和fea矩阵 
-        (test_adj, test_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+        # 取测试adj和fea矩阵
+        if (self.args.model == 'DropEdge'):
+            (test_adj, test_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+        else :
+            (test_adj, test_fea) = self.dataset["test_adj"], self.dataset["test_features"]
+
         if self.args.mixmode:
             test_adj = test_adj.cuda()
         # 进行测试    
         self.model.eval()
+        # 测试和训练走的都是模型的forward方法
         output = self.model(test_fea, test_adj)
         loss_test = F.nll_loss(output[self.idx_test], self.labels[self.idx_test])
         acc_test = accuracy(output[self.idx_test], self.labels[self.idx_test])

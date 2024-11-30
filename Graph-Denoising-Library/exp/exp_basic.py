@@ -1,7 +1,7 @@
 import os
 import torch
 
-from models import DropEdge
+from models import DropEdge, RGIB
 
 # 任务基类  
 class Exp_Basic(object):
@@ -9,7 +9,8 @@ class Exp_Basic(object):
         self.args = args
         # 这里填写已经适配好的模型
         self.model_dict = {
-            'DropEdge': DropEdge
+            'DropEdge': DropEdge,
+            'RGIB' : RGIB
         }
 
         self.device = self._acquire_device()

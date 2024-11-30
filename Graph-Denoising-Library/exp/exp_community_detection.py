@@ -12,7 +12,7 @@ from exp.exp_basic import Exp_Basic
 
 # warnings.filterwarnings('ignore')
 
-
+# 模型创建和其她相同。训练和测试不同
 class Exp_Community_Detection(Exp_Basic):
     def __init__(self, args):
         super(Exp_Community_Detection, self).__init__(args)

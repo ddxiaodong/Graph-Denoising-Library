@@ -1,6 +1,7 @@
 #!/bin/bash
 
 python -u run.py \
+    --model DropEdge \
     --debug \
     --datapath data/cora \
     --seed 42 \

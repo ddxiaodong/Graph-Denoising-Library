@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from layers.DropEdge_layers import *   # 注意from后的名称
+from utils.Sample import *
 device = torch.device("cuda:0")
 
 # nfeat nclass 数据中来  activation是传入的函数 其他参数都是命令行传入的
@@ -19,23 +20,7 @@ class Model(nn.Module):
        The total layer is nhidlayer*nbaselayer + 2.
        All options are configurable.
     """
-
-    # def __init__(self,
-    #              nfeat,
-    #              nhid,
-    #              nclass,
-    #              nhidlayer,
-    #              dropout,
-    #              baseblock="mutigcn",
-    #              inputlayer="gcn",
-    #              outputlayer="gcn",
-    #              nbaselayer=0,
-    #              activation=lambda x: x,
-    #              withbn=True,
-    #              withloop=True,
-    #              aggrmethod="add",
-    #              mixmode=False):
-    def __init__ (self, configs, activation = lambda x : x) :
+    def __init__ (self, configs) :
         """
         Initial function.
         :param nfeat: the input feature dimension.
@@ -56,9 +41,14 @@ class Model(nn.Module):
         """
         super(Model, self).__init__()
         # super().__init__
-        # 后文中用得到的属性就加self. 用不到就直接用名字
-        nfeat = configs.nfeat
-        nhid = configs.hidden   # 注意这里名字不对应  
+        # 后文中用得到的属性就加self. 用不到就直接用名字 但尽量都加上self 方便点
+        self.configs = configs
+        # 这里的数据需要用采样器获得 模型独有
+        self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
+        self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
+        self.args.nfeat = self.sampler.nfeat
+        self.args.nclass = self.sampler.nclass
+        nhid = configs.hidden   # 注意这里名字不对应
         nclass = configs.nclass
         nbaselayer = configs.nbaseblocklayer   # 这里不能加逗号  否则会被识别为元组
         nhidlayer = configs.nhiddenlayer
@@ -130,7 +120,7 @@ class Model(nn.Module):
     def reset_parameters(self):
         pass
 
-    # model(input_data) 时调用
+    # model(input_data) 时调用 输入特征和邻接矩阵
     def forward(self, fea, adj):
         # input
         if self.mixmode:

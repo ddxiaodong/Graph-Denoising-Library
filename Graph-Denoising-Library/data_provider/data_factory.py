@@ -5,11 +5,13 @@ import networkx as nx
 import numpy as np
 import scipy.sparse as sp
 import torch
+import torch_geometric.transforms as T
+from torch_geometric.data.remote_backend_utils import num_nodes
+from torch_geometric.datasets import Planetoid, WikipediaNetwork, AttributedGraphDataset
+from utils.Normalization import fetch_normalization, row_normalize # 必须在根目录运行才能识别到
+from utils.DropEdge_utils import sparse_mx_to_torch_sparse_tensor
 
-from utils.Normalization import fetch_normalization, row_normalize
-
-
-datadir = "data"
+datadir = "data/cora"
 
 # 原始加载数据集的方式  分为加载引文数据集和其她类型数据集
 
@@ -84,6 +86,10 @@ def load_citation(dataset_str="cora", normalization="AugNormAdj", porting_to_tor
         idx_test = torch.LongTensor(idx_test)
         degree = torch.LongTensor(degree)
     learning_type = "transductive"
+    # 获得边标签 和 边索引用于链路预测
+    edge_index = torch.tensor(adj.coalesce().indices(), dtype=torch.long) # 返回所有非零元素行索引或列索引
+    num_edges = edge_index.size(1)
+    edge_label = torch.ones(num_edges, dtype=torch.long)
     return adj, features, labels, idx_train, idx_val, idx_test, degree, learning_type
 
 # 从 .npz 文件中加载 Reddit 数据集的邻接矩阵、特征和标签。
@@ -127,22 +133,61 @@ def load_reddit_data(normalization="AugNormAdj", porting_to_torch=True, data_pat
     return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, degree, learning_type
 
 
-# 根据数据集名称调用对应的加载函数
-def data_loader(dataset, data_path=datadir, normalization="AugNormAdj", porting_to_torch=True, task_type = "full"):
-    if dataset == "reddit":
-        return load_reddit_data(normalization, porting_to_torch, data_path)
-    else:
-        (adj,
-         features,
-         labels,
-         idx_train,
-         idx_val,
-         idx_test,
-         degree,
-         learning_type) = load_citation(dataset, normalization, porting_to_torch, data_path, task_type)
-        train_adj = adj
-        train_features = features
-        return adj, train_adj, features, train_features, labels, idx_train, idx_val, idx_test, degree, learning_type
+# 根据数据集名称调用对应的加载函数 返回的数据太多太杂 使用字典存放数据？或使用pyg的格式存放？
+
+def data_loader(args):
+    '''
+        输入命令行参数
+        输出原始数据字典 邻接矩阵
+        考虑根据传参的模型采用不同的获取数据集方法
+    '''
+# dataset, datapath=datadir, normalization="AugNormAdj", porting_to_torch=True, task_type = "full")
+    dataset_dict = ["Cora", "CiteSeer", "PubMed"]
+    normalization="AugNormAdj"
+    datapath = args.datapath
+    porting_to_torch=True
+    dataset = args.dataset
+    task_type = args.task_type
+    # 对于传统获取数据的模型在此
+    if args.model == "DropEdge":
+        # 特殊的处理
+        if args.dataset == "reddit":
+            return load_reddit_data(normalization, porting_to_torch, datapath)
+        else:
+            data = load_citation(dataset, normalization, porting_to_torch, datapath, task_type)
+            (adj, features, labels, idx_train, idx_val, idx_test, degree, learning_type) = data
+            return {
+                "adj": adj,
+                "train_adj": adj,
+                "features": features,
+                "train_features": features,
+                "labels": labels,
+                "idx_train": idx_train,
+                "idx_val": idx_val,
+                "idx_test": idx_test,
+                "degree": degree,
+                "learning_type": learning_type
+            }
+    # 对于通过框架获取数据在此
+    elif args.model == "RGIB":
+        # 如果能直接从pyg框架中获得
+        if args.dataset in dataset_dict:
+            data = getDataset(args.dataset)
+            adj, train_adj, features, train_features, labels, train_index, val_index, test_index, edge_index, num_nodes, degree, learning_type = data
+            return {
+                "adj": adj,
+                "train_adj": adj,
+                "features": features,
+                "train_features": features,
+                "labels": labels,
+                "idx_train": train_index,
+                "idx_val": val_index,
+                "idx_test": test_index,
+                "edge_index": edge_index,
+                "num_nodes": num_nodes,
+                "degree": degree,
+                "learning_type": learning_type
+            }
 
 
 
@@ -162,3 +207,60 @@ def preprocess_citation(adj, features, normalization="FirstOrderGCN"):
     adj = adj_normalizer(adj)
     features = row_normalize(features)
     return adj, features
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# 使用pyg框架获取数据
+# data的完整属性 edge_index 图的边索引 形状为2 num_edges 包含双向边
+# x 节点特征属性 y节点标签 train_mask 训练集掩码 num_nodes 节点数
+# 可惜邻接矩阵被边索引替代了
+def getDataset(dataset_name, data_path=datadir):
+    # 注意这里的大小写要统一
+    assert dataset_name in ['Cora','Citeseer','Pubmed','chameleon','squirrel','facebook']
+
+    # 数据转换模块 将多个图数据处理步骤串联在一起，依次进行节点特征归一化、数据转移到device、随机划分边 生成训练测试验证
+
+    # transform = T.Compose([
+    #                 T.NormalizeFeatures(),
+    #                 T.ToDevice(device),
+    #                 T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
+    #                                 add_negative_train_samples=False),])
+
+    # 获取原始图 仅归一化
+    transform = T.Compose([
+                    T.NormalizeFeatures(),
+                    T.ToDevice(device)])
+    if dataset_name in ['Cora', 'Citeseer', 'Pubmed']:
+        path = os.path.join(data_path, 'Planetoid')
+        dataset = Planetoid(path, name=dataset_name, transform=transform)
+    elif dataset_name in ['chameleon', 'squirrel']:
+        path = os.path.join(data_path, 'WikipediaNetwork')
+        dataset = WikipediaNetwork(path, name=dataset_name, transform=transform)
+    elif dataset_name in ["facebook"]:
+        path = os.path.join(data_path, 'AttributedGraphDataset')
+        dataset = AttributedGraphDataset(path, name=dataset_name, transform=transform)
+    else:
+        exit()
+    # return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, degree, learning_type
+    data = dataset[0]
+    edge_index = data.edge_index
+    num_nodes = data.num_nodes
+    features = data.x
+    labels = data.y
+    train_index = data.train_mask
+    val_index = data.val_mask
+    test_index = data.test_mask
+    adj = torch.sparse_coo_tensor(edge_index, torch.ones(edge_index.size(1)), (num_nodes, num_nodes))
+    degree = torch.sum(adj, axis=1)
+    learning_type = "inductive"
+    train_adj = adj
+    train_features = features
+
+    # transform = T.Compose([
+    #                 T.NormalizeFeatures(),
+    #                 T.ToDevice(device),
+    #                 T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
+    #                                 add_negative_train_samples=False),])
+
+    print()
+    return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, edge_index, num_nodes, degree, learning_type

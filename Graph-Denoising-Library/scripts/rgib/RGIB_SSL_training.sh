@@ -8,4 +8,4 @@ python -u run.py \
     --noise_ratio 0.2 \
     --scheduler linear \
     --scheduler_param 1.0 \
-#    --task_name linkPrediction \
+    --task_name linkPrediction \

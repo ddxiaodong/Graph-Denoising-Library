@@ -26,9 +26,10 @@ class Exp_Classification(Exp_Basic):
         # 获取训练和测试数据 得到的是一个字典
         self.dataset = self._get_data("train")
         # 是dropedge使用采样器获取数据
-        if self.args.model == "dropedge" :
+        if self.args.model == "DropEdge" :
             # get labels and indexes
-            self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
+            # self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
+            self.sampler = Sampler(self.args)
             self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
             self.args.nfeat = self.sampler.nfeat
             self.args.nclass = self.sampler.nclass
@@ -102,8 +103,8 @@ class Exp_Classification(Exp_Basic):
 
 
             # randomedge sampling if args.sampling_percent >= 1.0, it behaves the same as stub_sampler.
-            if (self.args.model == "dropedge") :
-                (train_adj, train_fea) = self.sampler.randomedge_sampler(percent=self.args.sampling_percent, normalization=self.args.normalization,
+            if (self.args.model == "DropEdge") :
+                (train_adj, train_fea) = self.model.sampler.randomedge_sampler(percent=self.args.sampling_percent, normalization=self.args.normalization,
                                                                 cuda=self.args.cuda)
             else :
                 (train_adj, train_fea) = self.dataset["train_adj"], self.dataset["train_features"]
@@ -113,7 +114,7 @@ class Exp_Classification(Exp_Basic):
 
             sampling_t = time.time() - sampling_t
             if (self.args.model == 'DropEdge'):
-                (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+                (val_adj, val_fea) = self.model.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
             else :
                 (val_adj, val_fea) = self.dataset["val_adj"], self.dataset["val_features"]
 
@@ -198,7 +199,7 @@ class Exp_Classification(Exp_Basic):
                     's_time: {:.4f}s'.format(sampling_t),
                     't_time: {:.4f}s'.format(outputs[5]),
                     'v_time: {:.4f}s'.format(outputs[6]))
-            
+            # 使用tensorboard 记录结果
             # if args.no_tensorboard is False:
             #     tb_writer.add_scalars('Loss', {'train': outputs[0], 'val': outputs[2]}, epoch)
             #     tb_writer.add_scalars('Accuracy', {'train': outputs[1], 'val': outputs[3]}, epoch)

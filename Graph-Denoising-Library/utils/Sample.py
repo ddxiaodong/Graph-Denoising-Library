@@ -19,20 +19,33 @@ from utils.Normalization import fetch_normalization
 '''
 class Sampler:
     """Sampling the input graph data."""
-    def __init__(self, dataset, data_path="data", task_type="full"):
-        self.dataset = dataset
-        self.data_path = data_path
+    def __init__(self, configs):
+        self.configs = configs
+        self.dataset = configs.dataset
+        self.data_path = configs.datapath
+        self.configs = configs
         # 加载数据
-        (self.adj,
-         self.train_adj,
-         self.features,
-         self.train_features,
-         self.labels,
-         self.idx_train, 
-         self.idx_val,
-         self.idx_test, 
-         self.degree,
-         self.learning_type) = data_loader(dataset, data_path, "NoNorm", False, task_type)
+        datasetDict = data_loader(self.configs)
+        self.adj = datasetDict["adj"]
+        self.train_adj = datasetDict["train_adj"]
+        self.features = datasetDict["features"]
+        self.train_features = datasetDict["features"]
+        self.labels = datasetDict["labels"]
+        self.idx_train = datasetDict["idx_train"]
+        self.idx_val = datasetDict["idx_val"]
+        self.idx_test = datasetDict["idx_test"]
+        self.degree = datasetDict["degree"]
+        self.learning_type = datasetDict["learning_type"]
+        # (self.adj,
+        #  self.train_adj,
+        #  self.features,
+        #  self.train_features,
+        #  self.labels,
+        #  self.idx_train,
+        #  self.idx_val,
+        #  self.idx_test,
+        #  self.degree,
+         # self.learning_type) = data_loader(dataset, data_path, "NoNorm", False, task_type)
         
         #convert some data to torch tensor ---- may be not the best practice here.
         self.features = torch.FloatTensor(self.features).float()

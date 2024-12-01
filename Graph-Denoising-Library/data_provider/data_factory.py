@@ -87,7 +87,8 @@ def load_citation(dataset_str="cora", normalization="AugNormAdj", porting_to_tor
         degree = torch.LongTensor(degree)
     learning_type = "transductive"
     # 获得边标签 和 边索引用于链路预测
-    edge_index = torch.tensor(adj.coalesce().indices(), dtype=torch.long) # 返回所有非零元素行索引或列索引
+    edge_index = torch.tensor(sparse_mx_to_torch_sparse_tensor(adj).float().coalesce().indices(), dtype=torch.long)
+    # edge_index = torch.tensor(adj.coalesce().indices(), dtype=torch.long) # 返回所有非零元素行索引或列索引
     num_edges = edge_index.size(1)
     edge_label = torch.ones(num_edges, dtype=torch.long)
     return adj, features, labels, idx_train, idx_val, idx_test, degree, learning_type
@@ -145,16 +146,16 @@ def data_loader(args):
     dataset_dict = ["Cora", "CiteSeer", "PubMed"]
     normalization="AugNormAdj"
     datapath = args.datapath
-    porting_to_torch=True
+    porting_to_torch=False
     dataset = args.dataset
     task_type = args.task_type
     # 对于传统获取数据的模型在此
     if args.model == "DropEdge":
         # 特殊的处理
         if args.dataset == "reddit":
-            return load_reddit_data(normalization, porting_to_torch, datapath)
+            return load_reddit_data(normalization, False, datapath)
         else:
-            data = load_citation(dataset, normalization, porting_to_torch, datapath, task_type)
+            data = load_citation(dataset, normalization, False, datapath, task_type)
             (adj, features, labels, idx_train, idx_val, idx_test, degree, learning_type) = data
             return {
                 "adj": adj,

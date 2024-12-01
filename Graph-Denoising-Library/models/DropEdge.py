@@ -44,10 +44,10 @@ class Model(nn.Module):
         # 后文中用得到的属性就加self. 用不到就直接用名字 但尽量都加上self 方便点
         self.configs = configs
         # 这里的数据需要用采样器获得 模型独有
-        self.sampler = Sampler(self.args.dataset, self.args.datapath, self.args.task_type)
-        self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.args.cuda)
-        self.args.nfeat = self.sampler.nfeat
-        self.args.nclass = self.sampler.nclass
+        self.sampler = Sampler(self.configs)
+        self.labels, self.idx_train, self.idx_val, self.idx_test = self.sampler.get_label_and_idxes(self.configs.cuda)
+        self.configs.nfeat = self.sampler.nfeat
+        self.configs.nclass = self.sampler.nclass
         nhid = configs.hidden   # 注意这里名字不对应
         nclass = configs.nclass
         nbaselayer = configs.nbaseblocklayer   # 这里不能加逗号  否则会被识别为元组
@@ -75,13 +75,13 @@ class Model(nn.Module):
             raise NotImplementedError("Current baseblock %s is not supported." % (baseblock))
         if inputlayer == "gcn":
             # input gc
-            self.ingc = GraphConvolutionBS(nfeat, nhid, activation, withbn, withloop)
+            self.ingc = GraphConvolutionBS(self.configs.nfeat, nhid, activation, withbn, withloop)
             baseblockinput = nhid
         elif inputlayer == "none":
             self.ingc = lambda x: x
-            baseblockinput = nfeat
+            baseblockinput = self.configs.nfeat
         else:
-            self.ingc = Dense(nfeat, nhid, activation)
+            self.ingc = Dense(self.configs.nfeat, nhid, activation)
             baseblockinput = nhid
 
         outactivation = lambda x: x

@@ -4,7 +4,6 @@ import torch
 from torch.nn import ModuleList
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
-from torch_geometric.utils import negative_sampling
 from utils.RGIB_utils import generate_augmentation_operator
 import random
 import math
@@ -49,14 +48,7 @@ class Model(torch.nn.Module):
 
 
         # a new round of negative sampling for every training epoch
-        # 正样本边是真实存在的边 表示图中的实际连接关系 负样本边是图中不存在的边，用于训练模型了解哪些连接是无效的
-        neg_edge_index = negative_sampling(
-            edge_index=edge_index, num_nodes=train_data.num_nodes,
-            num_neg_samples=train_data.edge_label_index.size(1), method='sparse')
-        edge_label_index = torch.cat(
-            [train_data.edge_label_index, neg_edge_index],
-            dim=-1,
-        )
+
 
         # forward with original graph
         z = self.model.encode(x, edge_index)

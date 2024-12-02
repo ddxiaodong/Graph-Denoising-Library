@@ -14,6 +14,8 @@ from utils.Sample import Sampler
 from utils.EarlyStopping import EarlyStopping
 import torch.nn.functional as F
 from utils.metric import accuracy, roc_auc_compute_fn
+from torch_geometric.utils import negative_sampling
+
 
 warnings.filterwarnings('ignore')
 
@@ -29,10 +31,10 @@ class Exp_Link_Prediction(Exp_Basic):
         self.args.dataset = self._get_data("train")
         # 获取数据集中的信息 链路预测需要的信息： edge_index edge_label edge_label_index
         self.args.edge_index = self.args.dataset['edge_index']
-        self.labels, self.idx_train, self.idx_val, self.idx_test = self.dataset["labels"], self.dataset["idx_train"], self.dataset["idx_val"], self.dataset["idx_test"]
+        self.labels, self.idx_train, self.idx_val, self.idx_test = self.args.dataset["labels"], self.args.dataset["idx_train"], self.args.dataset["idx_val"], self.args.dataset["idx_test"]
         # 特征维度 类别维度
-        self.args.nfeat = self.dataset["features"].shape[1]
-        self.args.nclass = int(self.dataset["labels"].max().item() + 1)
+        self.args.nfeat = self.args.dataset["features"].shape[1]
+        self.args.nclass = int(self.args.dataset["labels"].max().item() + 1)
         # model初始化 传入模型名 这里是利用父类的 model_dict
         model = self.model_dict[self.args.model].Model(self.args).float()
         # convert to cuda
@@ -92,7 +94,15 @@ class Exp_Link_Prediction(Exp_Basic):
         sampling_t = 0
         model_optim = self._select_optimizer()
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
-
+        # 生成负样本和正样本
+        # 正样本边是真实存在的边 表示图中的实际连接关系 负样本边是图中不存在的边，用于训练模型了解哪些连接是无效的
+        neg_edge_index = negative_sampling(
+            edge_index=self.args.edge_index, num_nodes=self.args.train_data.num_nodes,
+            num_neg_samples=self.args.train_data.edge_label_index.size(1), method='sparse')
+        edge_label_index = torch.cat(
+            [self.args.train_data.edge_label_index, neg_edge_index],
+            dim=-1,
+        )
         for epoch in range(self.args.epochs):
 
             input_idx_train = self.idx_train
@@ -101,18 +111,12 @@ class Exp_Link_Prediction(Exp_Basic):
                 train_adj = train_adj.cuda()
 
             sampling_t = time.time() - sampling_t
-            (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+            # (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
             if self.args.mixmode:
                 val_adj = val_adj.cuda()
 
-            # if sampler.learning_type == "transductive":
-            if False:
-                outputs = train(epoch, train_adj, train_fea, input_idx_train)  # TODO 这一块先不处理
-            else:
-                (val_adj, val_fea) = sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
-                if self.args.mixmode:
-                    val_adj = val_adj.cuda()
-                # outputs = train(epoch, train_adj, train_fea, input_idx_train, val_adj, val_fea)
+            # 模型训练的核心
+            outputs = self.model(x, edge_index)
 
             t = time.time()
             self.model.train()

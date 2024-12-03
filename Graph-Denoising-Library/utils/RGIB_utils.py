@@ -76,7 +76,7 @@ def calculateDistSim(res, savePath=None):
     return [np.mean(pos_sim), np.mean(neg_sim), ks_dis]
 
 
-# 随机增强器
+# 随机增强器 原始代码使用的部分
 def generate_augmentation_operator(n=2):
     # 数据增强的操作
     search_space = [
@@ -100,3 +100,65 @@ def generate_augmentation_operator(n=2):
 
     aug = A.Compose(operator_list)
     return aug
+
+
+import random
+import torch
+from torch_geometric.utils import remove_self_loops, add_self_loops
+
+# 自定义增强函数
+def identity(x, edge_index):
+    return x, edge_index
+
+def feature_masking(x, edge_index, mask_rate=0.3):
+    # 随机遮掩特征
+    mask = torch.rand(x.size(0)) < mask_rate
+    x[mask] = 0
+    return x, edge_index
+
+def feature_dropout(x, edge_index, dropout_rate=0.3):
+    # 丢弃特征
+    mask = torch.rand(x.size(0)) < dropout_rate
+    x[mask] = 0
+    return x, edge_index
+
+def edge_removing(x, edge_index, removal_rate=0.5):
+    # 随机删除边
+    edge_mask = torch.rand(edge_index.size(1)) < removal_rate
+    edge_index = edge_index[:, ~edge_mask]
+    return x, edge_index
+
+# 增强操作生成函数
+def generate_augmentation_operatorV2(n=2):
+    # 定义可能的增强操作
+    search_space = [
+        (identity, ()),  # 不进行增强
+        (feature_masking, (0.0, 0.3)),  # 遮掩特征
+        (feature_dropout, (0.0, 0.3)),  # 丢弃特征
+        (edge_removing, (0.0, 0.5))  # 删除边
+    ]
+
+    operator_list = []
+    index = list(range(len(search_space)))
+    random.shuffle(index)
+    sampled_index = index[:n]
+
+    for idx in sampled_index:
+        opt, hp_range = search_space[idx]
+        if hp_range == ():
+            operator_list.append(opt)  # 直接添加操作
+        else:
+            sampled_hp = random.uniform(hp_range[0], hp_range[1])  # 随机选择超参数
+            # 对于需要超参数的操作，传递超参数
+            if opt in [feature_masking, feature_dropout, edge_removing]:
+                operator_list.append(lambda x, edge_index, hp=sampled_hp: opt(x, edge_index, hp))  # 用 lambda 延迟执行
+            else:
+                operator_list.append(opt)  # 不需要超参数的操作，直接添加
+
+    # 返回增强组合
+    def augmentation(x, edge_index):
+        for op in operator_list:
+            x, edge_index = op(x, edge_index)  # 传入 x 和 edge_index
+        return x, edge_index
+
+    return augmentation

@@ -4,7 +4,7 @@ import torch
 from torch.nn import ModuleList
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
-from utils.RGIB_utils import generate_augmentation_operator
+from utils.RGIB_utils import generate_augmentation_operatorV2
 import random
 import math
 
@@ -43,28 +43,24 @@ class Model(torch.nn.Module):
     def forward(self, x, edge_index):
         # 每个模型调用 model(train_fea, train_adj)方法时,都要调用forward方法
         # 原模型输入的是pyg格式的数据 需要在传入时转换
-        aug1 = generate_augmentation_operator()
-        aug2 = generate_augmentation_operator()
-
-
-        # a new round of negative sampling for every training epoch
-
+        aug1 = generate_augmentation_operatorV2()
+        aug2 = generate_augmentation_operatorV2()
 
         # forward with original graph
         z = self.model.encode(x, edge_index)
-        hidden, out = self.model.decode(z, edge_label_index)
+        hidden, out = self.model.decode(z, self.edge_label_index)
         out = out.view(-1)
 
         # forward with original augmented graph1
-        x1, edge_index1, _ = aug1(x, edge_index)
+        x1, edge_index1 = aug1(x, edge_index)
         z1 = self.model.encode(x1, edge_index1)
-        hidden1, out1 = self.model.decode(z1, edge_label_index)
+        hidden1, out1 = self.model.decode(z1, self.edge_label_index)
         out1 = out1.view(-1)
 
         # forward with original augmented graph2
-        x2, edge_index2, _ = aug2(x, edge_index)
+        x2, edge_index2 = aug2(x, edge_index)
         z2 = self.model.encode(x2, edge_index2)
-        hidden2, out2 = self.model.decode(z2, edge_label_index)
+        hidden2, out2 = self.model.decode(z2, self.edge_label_index)
         out2 = out2.view(-1)
         return out1
 

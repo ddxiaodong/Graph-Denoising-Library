@@ -1,4 +1,5 @@
 from data_provider.data_factory import *
+import GCL.augmentors
 
 
 if __name__ == '__main__':
@@ -17,3 +18,4 @@ if __name__ == '__main__':
     # 如果需要密集矩阵表示
     adj_dense = adj.to_dense()
     print(adj_dense)
+

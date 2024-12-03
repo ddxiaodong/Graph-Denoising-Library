@@ -32,9 +32,14 @@ class Exp_Link_Prediction(Exp_Basic):
         # 获取数据集中的信息 链路预测需要的信息： edge_index edge_label edge_label_index
         self.args.edge_index = self.args.dataset['edge_index']
         self.labels, self.idx_train, self.idx_val, self.idx_test = self.args.dataset["labels"], self.args.dataset["idx_train"], self.args.dataset["idx_val"], self.args.dataset["idx_test"]
+        self.features = self.args.dataset["features"]
+
         # 特征维度 类别维度
         self.args.nfeat = self.args.dataset["features"].shape[1]
         self.args.nclass = int(self.args.dataset["labels"].max().item() + 1)
+        self.args.num_nodes = self.args.dataset["num_nodes"]
+        # todo  加载训练和测试集
+
         # model初始化 传入模型名 这里是利用父类的 model_dict
         model = self.model_dict[self.args.model].Model(self.args).float()
         # convert to cuda
@@ -95,16 +100,24 @@ class Exp_Link_Prediction(Exp_Basic):
         model_optim = self._select_optimizer()
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
         # 生成负样本和正样本
-        # 正样本边是真实存在的边 表示图中的实际连接关系 负样本边是图中不存在的边，用于训练模型了解哪些连接是无效的
+        # 正样本边是真实存在的边 表示图中的实际连接关系 即 edge_index
+        # 负样本边是图中不存在的边，用于训练模型了解哪些连接是无效的
+        # negative_sampling是pyg的工具函数 用于生成负样本 传入 原图的边索引、节点数量、负样本数量
         neg_edge_index = negative_sampling(
-            edge_index=self.args.edge_index, num_nodes=self.args.train_data.num_nodes,
-            num_neg_samples=self.args.train_data.edge_label_index.size(1), method='sparse')
-        edge_label_index = torch.cat(
-            [self.args.train_data.edge_label_index, neg_edge_index],
+            edge_index=self.args.edge_index, num_nodes=self.args.num_nodes,
+            num_neg_samples=self.args.edge_index.size(1), method='sparse')
+        # 合并正负样本 生成最终的 edge_label_index
+        self.model.edge_label_index = torch.cat(
+            [self.args.edge_index, neg_edge_index],
             dim=-1,
         )
-        for epoch in range(self.args.epochs):
 
+        # 边标签 1表示存在 0表示不存在
+        self.model.edge_label = torch.cat([
+            self.args.edge_index[1],
+            self.args.edge_index.new_zeros(neg_edge_index.size(1))
+        ], dim=0)
+        for epoch in range(self.args.epochs):
             input_idx_train = self.idx_train
             sampling_t = time.time()
             if self.args.mixmode:
@@ -116,21 +129,14 @@ class Exp_Link_Prediction(Exp_Basic):
                 val_adj = val_adj.cuda()
 
             # 模型训练的核心
-            outputs = self.model(x, edge_index)
+            output = self.model(self.features, self.args.edge_index)
 
             t = time.time()
             self.model.train()
             model_optim.zero_grad()
-            # EXP——classification只用于模型创建、训练和测试框架的撰写。具体还要在具体模型中farward中实现
 
-            # output = self.model(, )
-            # special for reddit
-            if self.sampler.learning_type == "inductive":
-                loss_train = F.nll_loss(output, self.labels[self.idx_train])
-                acc_train = accuracy(output, self.labels[self.idx_train])
-            else:
-                loss_train = F.nll_loss(output[self.idx_train], self.labels[self.idx_train])
-                acc_train = accuracy(output[self.idx_train], self.labels[self.idx_train])
+            loss_train = F.nll_loss(output, self.labels[self.idx_train])
+            acc_train = accuracy(output, self.labels[self.idx_train])
 
             loss_train.backward()
             model_optim.step()

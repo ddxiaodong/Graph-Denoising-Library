@@ -173,21 +173,32 @@ def data_loader(args):
     elif args.model == "RGIB":
         # 如果能直接从pyg框架中获得
         if args.dataset in dataset_dict:
-            data = getDataset(args.dataset)
-            adj, train_adj, features, train_features, labels, train_index, val_index, test_index, edge_index, num_nodes, degree, learning_type = data
+            data = getDatasetByPyg(args.dataset)
+            (adj, features, labels, edge_index, num_nodes, degree, learning_type,
+             train_index, train_edge_label, train_edge_label_index, train_edge_index,
+             val_index, val_edge_label, val_edge_label_index, val_edge_index,
+             test_index, test_edge_label, test_edge_label_index, test_edge_index
+             ) = data
             return {
                 "adj": adj,
-                "train_adj": adj,
                 "features": features,
-                "train_features": features,
                 "labels": labels,
-                "idx_train": train_index,
-                "idx_val": val_index,
-                "idx_test": test_index,
                 "edge_index": edge_index,
                 "num_nodes": num_nodes,
                 "degree": degree,
-                "learning_type": learning_type
+                "learning_type": learning_type,
+                "train_index": train_index,
+                "train_edge_index": train_edge_index,
+                "train_edge_label": train_edge_label,
+                "train_edge_label_index": train_edge_label_index,
+                "val_edge_index": val_edge_index,
+                "val_index": val_index,
+                "val_edge_label" : val_edge_label,
+                "val_edge_label_index": val_edge_label_index,
+                "test_edge_index": test_edge_index,
+                "test_index": test_index,
+                "test_edge_label" : test_edge_label,
+                "test_edge_label_index" : test_edge_label_index
             }
 
 
@@ -215,17 +226,21 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # data的完整属性 edge_index 图的边索引 形状为2 num_edges 包含双向边
 # x 节点特征属性 y节点标签 train_mask 训练集掩码 num_nodes 节点数
 # 可惜邻接矩阵被边索引替代了
-def getDataset(dataset_name, data_path=datadir):
+def getDatasetByPyg(dataset_name, data_path=datadir):
     # 注意这里的大小写要统一
     assert dataset_name in ['Cora','Citeseer','Pubmed','chameleon','squirrel','facebook']
 
     # 数据转换模块 将多个图数据处理步骤串联在一起，依次进行节点特征归一化、数据转移到device、随机划分边 生成训练测试验证
+    # T.RandomLinkSplit变换的目的是将图中的边划分为训练集、验证集和测试集。
+    # 在链路预测任务中，这通常是通过保留一部分已知的边作为正样本，并从图中随机采样一些不存在的边作为负样本来实现的。这个变换会修改原始数据集，使其不仅包含图数据，还包含这些划分后的边集。
+    # 当add_negative_train_samples=False时，T.RandomLinkSplit不会向训练集中添加负样本（即不存在的边）。但是，它仍然会进行边的划分，并更新数据集对象以包含这些划分。
 
-    # transform = T.Compose([
-    #                 T.NormalizeFeatures(),
-    #                 T.ToDevice(device),
-    #                 T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
-    #                                 add_negative_train_samples=False),])
+    # 划分训练测试
+    transform_spilt = T.Compose([
+                    T.NormalizeFeatures(),
+                    T.ToDevice(device),
+                    T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
+                                    add_negative_train_samples=False),])
 
     # 获取原始图 仅归一化
     transform = T.Compose([
@@ -233,35 +248,44 @@ def getDataset(dataset_name, data_path=datadir):
                     T.ToDevice(device)])
     if dataset_name in ['Cora', 'Citeseer', 'Pubmed']:
         path = os.path.join(data_path, 'Planetoid')
+        preprocess_dataset = Planetoid(path, name=dataset_name, transform=transform_spilt)
         dataset = Planetoid(path, name=dataset_name, transform=transform)
     elif dataset_name in ['chameleon', 'squirrel']:
         path = os.path.join(data_path, 'WikipediaNetwork')
+        preprocess_dataset = WikipediaNetwork(path, name=dataset_name, transform=transform_spilt)
         dataset = WikipediaNetwork(path, name=dataset_name, transform=transform)
     elif dataset_name in ["facebook"]:
         path = os.path.join(data_path, 'AttributedGraphDataset')
+        preprocess_dataset = AttributedGraphDataset(path, name=dataset_name, transform=transform_spilt)
         dataset = AttributedGraphDataset(path, name=dataset_name, transform=transform)
     else:
         exit()
     # return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, degree, learning_type
-    data = dataset[0]
+    (train_data, val_data, test_data) = preprocess_dataset[0]  # 训练验证测试数据
+    data = dataset[0] # 整图
     edge_index = data.edge_index
     num_nodes = data.num_nodes
     features = data.x
-    labels = data.y
-    train_index = data.train_mask
-    val_index = data.val_mask
-    test_index = data.test_mask
+    labels = data.y # 节点标签
+    train_edge_index = train_data.edge_index
+    train_edge_label = train_data.edge_label
+    train_edge_label_index = train_data.edge_label_index
+    train_index = train_data.train_mask
+    val_edge_index = val_data.edge_index
+    val_edge_label = val_data.edge_label
+    val_edge_label_index = val_data.edge_label_index
+    val_index = val_data.val_mask
+    test_edge_index = test_data.edge_index
+    test_edge_label = test_data.edge_label
+    test_edge_label_index = test_data.edge_label_index
+    test_index = test_data.test_mask
     adj = torch.sparse_coo_tensor(edge_index, torch.ones(edge_index.size(1)), (num_nodes, num_nodes))
     degree = torch.sum(adj, axis=1)
     learning_type = "inductive"
-    train_adj = adj
-    train_features = features
-
-    # transform = T.Compose([
-    #                 T.NormalizeFeatures(),
-    #                 T.ToDevice(device),
-    #                 T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
-    #                                 add_negative_train_samples=False),])
 
     print()
-    return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, edge_index, num_nodes, degree, learning_type
+    return (adj, features, labels, edge_index, num_nodes, degree, learning_type,
+            train_index, train_edge_label, train_edge_label_index, train_edge_index,
+            val_index, val_edge_label, val_edge_label_index, val_edge_index,
+            test_index, test_edge_label, test_edge_label_index, test_edge_index
+            )

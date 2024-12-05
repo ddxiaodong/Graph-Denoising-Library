@@ -14,7 +14,8 @@ from utils.Sample import Sampler
 from utils.EarlyStopping import EarlyStopping
 import torch.nn.functional as F
 from utils.metric import accuracy, roc_auc_compute_fn
-from torch_geometric.utils import negative_sampling
+from torch_geometric.utils import negative_sampling, train_test_split_edges
+from sklearn.metrics import roc_auc_score
 
 
 warnings.filterwarnings('ignore')
@@ -31,10 +32,8 @@ class Exp_Link_Prediction(Exp_Basic):
         self.args.dataset = self._get_data("train")
         # 获取数据集中的信息 链路预测需要的信息： edge_index edge_label edge_label_index
         self.args.edge_index = self.args.dataset['edge_index']
-        self.labels, self.idx_train, self.idx_val, self.idx_test = self.args.dataset["labels"], self.args.dataset["idx_train"], self.args.dataset["idx_val"], self.args.dataset["idx_test"]
         self.features = self.args.dataset["features"]
-
-        # 特征维度 类别维度
+        # # 特征维度 类别维度
         self.args.nfeat = self.args.dataset["features"].shape[1]
         self.args.nclass = int(self.args.dataset["labels"].max().item() + 1)
         self.args.num_nodes = self.args.dataset["num_nodes"]
@@ -55,7 +54,7 @@ class Exp_Link_Prediction(Exp_Basic):
             self.idx_train = self.idx_train.cuda()
             self.idx_val = self.idx_val.cuda()
             self.idx_test = self.idx_test.cuda()
-        #
+        # warm_start
         if self.args.warm_start is not None and self.args.warm_start != "":
             self.early_stopping = EarlyStopping(fname=self.args.warm_start, verbose=False)
             print("Restore checkpoint from %s" % (self.early_stopping.fname))
@@ -99,34 +98,45 @@ class Exp_Link_Prediction(Exp_Basic):
         sampling_t = 0
         model_optim = self._select_optimizer()
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
+        train_edge_index = self.args.dataset['train_edge_index']
+        train_edge_label = self.args.dataset['train_edge_label']
+        train_edge_label_index = self.args.dataset['train_edge_label_index']
+        num_nodes = self.args.dataset['num_nodes']
+        train_index = self.args.dataset['train_index']
+        val_index = self.args.dataset['val_index']
+        val_edge_index = self.args.dataset['val_edge_index']
+        val_edge_label = self.args.dataset['val_edge_label']
+        val_edge_label_index = self.args.dataset['val_edge_label_index']
+        test_index = self.args.dataset['test_index']
+
         # 生成负样本和正样本
         # 正样本边是真实存在的边 表示图中的实际连接关系 即 edge_index
         # 负样本边是图中不存在的边，用于训练模型了解哪些连接是无效的
         # negative_sampling是pyg的工具函数 用于生成负样本 传入 原图的边索引、节点数量、负样本数量
         neg_edge_index = negative_sampling(
-            edge_index=self.args.edge_index, num_nodes=self.args.num_nodes,
-            num_neg_samples=self.args.edge_index.size(1), method='sparse')
-        # 合并正负样本 生成最终的 edge_label_index
+            edge_index=train_edge_index, num_nodes=num_nodes,
+            num_neg_samples=train_edge_label_index.size(1), method='sparse')
+        # 合并正负样本 生成最终的 edge_label_index 表示每个边的索引
         self.model.edge_label_index = torch.cat(
-            [self.args.edge_index, neg_edge_index],
-            dim=-1,
-        )
+                [train_edge_label_index, neg_edge_index],
+                dim=-1,
+            )
 
-        # 边标签 1表示存在 0表示不存在
+        # 边标签 1表示存在 0表示不存在 正边和负边
         self.model.edge_label = torch.cat([
-            self.args.edge_index[1],
-            self.args.edge_index.new_zeros(neg_edge_index.size(1))
-        ], dim=0)
+                train_edge_label,
+                train_edge_label.new_zeros(neg_edge_index.size(1))
+            ], dim=0)
         for epoch in range(self.args.epochs):
-            input_idx_train = self.idx_train
             sampling_t = time.time()
-            if self.args.mixmode:
-                train_adj = train_adj.cuda()
+            # if self.args.mixmode:
+            #     train_adj = train_adj.cuda()
 
             sampling_t = time.time() - sampling_t
             # (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
-            if self.args.mixmode:
-                val_adj = val_adj.cuda()
+            # if self.args.mixmode:
+            #     val_adj = val_adj.cuda()
 
             # 模型训练的核心
             output = self.model(self.features, self.args.edge_index)
@@ -135,8 +145,12 @@ class Exp_Link_Prediction(Exp_Basic):
             self.model.train()
             model_optim.zero_grad()
 
-            loss_train = F.nll_loss(output, self.labels[self.idx_train])
-            acc_train = accuracy(output, self.labels[self.idx_train])
+            # 计算损失 需要变成链路预测的损失
+            # loss_train = F.nll_loss(output, self.labels[self.idx_train])
+            # acc_train = accuracy(output, self.labels[self.idx_train])
+            # todo 计算了 五个损失
+            # loss1: supervised loss with original graph 监督损失
+            loss_train = criterion(output, self.model.edge_label.float()).mean()
 
             loss_train.backward()
             model_optim.step()
@@ -145,19 +159,20 @@ class Exp_Link_Prediction(Exp_Basic):
             # We can not apply the fastmode for the reddit dataset.
             # if sampler.learning_type == "inductive" or not args.fastmode:
 
-            if self.args.early_stopping > 0 and self.sampler.dataset != "reddit":
-                loss_val = F.nll_loss(output[self.idx_val], self.labels[self.idx_val]).item()
-                self.early_stopping(loss_val, self.model)
+            # 改成链路预测早停法的逻辑
+            # if self.args.early_stopping > 0 and self.sampler.dataset != "reddit":
+            #     loss_val = F.nll_loss(output[val_index], self.labels[self.idx_val]).item()
+            #     self.early_stopping(loss_val, self.model)
+            #
 
+            # 验证集的逻辑
             if not self.args.fastmode:
-                #    # Evaluate validation set performance separately,
-                #    # deactivates dropout during validation run.
+                #  Evaluate validation set performance separately,
+                #  deactivates dropout during validation run.
                 self.model.eval()
-                output = self.model(val_fea, val_adj)
-                loss_val = F.nll_loss(output[self.idx_val], self.labels[self.idx_val]).item()
-                acc_val = accuracy(output[self.idx_val], self.labels[self.idx_val]).item()
-                if self.sampler.dataset == "reddit":
-                    self.early_stopping(loss_val, self.model)
+                output_val = self.model(self.features, val_edge_index)
+                loss_val = criterion(output_val, self.model.edge_label.float()).mean()
+                acc_val = roc_auc_score(self.model.edge_label.cpu(), output_val.detach().cpu().numpy())
             else:
                 loss_val = 0
                 acc_val = 0
@@ -166,10 +181,12 @@ class Exp_Link_Prediction(Exp_Basic):
                 scheduler.step()
 
             val_t = time.time() - val_t
-
+            output = output.view(-1).sigmoid()
+            # 二分类准确率 边存在或缺失
+            acc_train = roc_auc_score(self.model.edge_label.cpu(), output.detach().cpu().numpy())
             # return (loss_train.item(), acc_train.item(), loss_val, acc_val, get_lr(optimizer), train_t, val_t)
             outputs = (
-            loss_train.item(), acc_train.item(), loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
+            loss_train.item(), acc_train, loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
             if self.args.debug and epoch % 1 == 0:
                 print('Epoch: {:04d}'.format(epoch + 1),
                       'loss_train: {:.4f}'.format(outputs[0]),
@@ -209,20 +226,24 @@ class Exp_Link_Prediction(Exp_Basic):
 
 #    test用到的 sampler idx_test labels
     def test(self):
-        # 取测试adj和fea矩阵
-        (test_adj, test_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
-        if self.args.mixmode:
-            test_adj = test_adj.cuda()
+        # 取测试数据
+        test_index = self.args.dataset['test_index']
+        test_edge_index = self.args.dataset['test_edge_index']
+        test_edge_label = self.args.dataset['test_edge_label']
+        test_edge_label_index = self.args.dataset['test_edge_label_index']
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
+
+        # 数据转移到cuda训练的逻辑
+        # if self.args.mixmode:
+        #     test_adj = test_adj.cuda()
         # 进行测试
         self.model.eval()
-        output = self.model(test_fea, test_adj)
-        loss_test = F.nll_loss(output[self.idx_test], self.labels[self.idx_test])
-        acc_test = accuracy(output[self.idx_test], self.labels[self.idx_test])
-        auc_test = roc_auc_compute_fn(output[self.idx_test], self.labels[self.idx_test])
+        output_test = self.model(self.features, test_edge_index)
+        loss_test = criterion(output_test, self.model.edge_label.float()).mean()
+        acc_test = roc_auc_score(self.model.edge_label.cpu().numpy(), output_test.detach().cpu().numpy())
         if self.args.debug:
             print("Test set results:",
                   "loss= {:.4f}".format(loss_test.item()),
-                  "auc= {:.4f}".format(auc_test),
                   "accuracy= {:.4f}".format(acc_test.item()))
             print("accuracy=%.5f" % (acc_test.item()))
 

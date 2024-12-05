@@ -158,7 +158,7 @@ def generate_augmentation_operatorV2(n=2):
     # 返回增强组合
     def augmentation(x, edge_index):
         for op in operator_list:
-            x, edge_index = op(x, edge_index)  # 传入 x 和 edge_index
+            x, edge_index = op(x, edge_index)  # 传入 x 和 edge_index 调用数据增强函数
         return x, edge_index
 
     return augmentation

@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from layers.DropEdge_layers import *   # 注意from后的名称
+from layers.DropEdge_layers import GraphConvolutionBS,  ResGCNBlock, DenseGCNBlock, MultiLayerGCNBlock, InecptionGCNBlock, Dense
 from utils.Sample import *
-device = torch.device("cuda:0")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # nfeat nclass 数据中来  activation是传入的函数 其他参数都是命令行传入的
 # 需要self的都是在别的函数要用到的  只在init中用到的 实际上只定义变量即可

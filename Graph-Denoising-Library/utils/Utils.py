@@ -2,13 +2,47 @@ import os.path as osp
 import numpy as np
 import torch
 import torch_geometric.transforms as T
-from torch_geometric.datasets import Planetoid, WikipediaNetwork, AttributedGraphDataset
 import random
 from tqdm import tqdm
 import scipy.stats
 import copy
 import os
+import pickle as pkl
+import sys
+import os
+import networkx as nx
+import numpy as np
+import scipy.sparse as sp
+from utils.Normalization import fetch_normalization, row_normalize
+from torch_geometric.utils import remove_self_loops, add_self_loops
 
+"""
+    工具类 所有模型额外的utils可存放在此处
+"""
+
+# 将 SciPy 的稀疏矩阵格式转换为 PyTorch 的稀疏张量格式
+def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.FloatTensor(indices, values, shape)
+
+# 执行简单图卷积
+def sgc_precompute(features, adj, degree):
+    #t = perf_counter()
+    for i in range(degree):
+        features = torch.spmm(adj, features)
+    precompute_time = 0 #perf_counter()-t
+    return features, precompute_time
+
+# 设置随机种子
+def set_seed(seed, cuda):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if cuda: torch.cuda.manual_seed(seed)
 
 
 def checkPath(path):
@@ -17,34 +51,12 @@ def checkPath(path):
     return
 
 
-def getDataset(dataset_name, device, rel_path='./data'):
-    assert dataset_name in ['Cora', 'Citeseer', 'Pubmed', 'chameleon', 'squirrel', 'facebook']
-    transform = T.Compose([
-        T.NormalizeFeatures(),
-        T.ToDevice(device),
-        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
-                          add_negative_train_samples=False), ])
-    if dataset_name in ['Cora', 'Citeseer', 'Pubmed']:
-        path = osp.join(rel_path, 'Planetoid')
-        dataset = Planetoid(path, name=dataset_name, transform=transform)
-    elif dataset_name in ['chameleon', 'squirrel']:
-        path = osp.join(rel_path, 'WikipediaNetwork')
-        dataset = WikipediaNetwork(path, name=dataset_name, transform=transform)
-    elif dataset_name in ["facebook"]:
-        path = osp.join(rel_path, 'AttributedGraphDataset')
-        dataset = AttributedGraphDataset(path, name=dataset_name, transform=transform)
-    else:
-        exit()
-    return path, dataset
-
-
-
-
 
 def jensen_shannon_distance(p, q):
     """
     method to compute the Jenson-Shannon Distance
     between two probability distributions
+    用于衡量两个概率分布p和q之间的相似性 0表示两个分布完全相同 1表示两个分布互斥
     """
     # convert the vectors into numpy arrays in case that they aren't
     p = np.array(p)
@@ -59,6 +71,10 @@ def jensen_shannon_distance(p, q):
 
 
 def calculateDistSim(res, savePath=None):
+    """
+    基于节点嵌入的相似性，计算正负类分布的统计特性和分布差异，
+    返回正类相似度均值、负类相似度均值、分布差异统计量
+    """
     r_edge, r_node, label, predict = res
     label = label.int().tolist()
     cos = torch.nn.CosineSimilarity(dim=0)
@@ -76,7 +92,7 @@ def calculateDistSim(res, savePath=None):
     return [np.mean(pos_sim), np.mean(neg_sim), ks_dis]
 
 
-# 随机增强器 原始代码使用的部分
+# 随机增强器 原始代码使用的部分 GCL这个库不支持在mac上使用  后面有自定义的替代版本
 def generate_augmentation_operator(n=2):
     # 数据增强的操作
     search_space = [
@@ -102,9 +118,7 @@ def generate_augmentation_operator(n=2):
     return aug
 
 
-import random
-import torch
-from torch_geometric.utils import remove_self_loops, add_self_loops
+
 
 # 自定义增强函数
 def identity(x, edge_index):
@@ -162,3 +176,45 @@ def generate_augmentation_operatorV2(n=2):
         return x, edge_index
 
     return augmentation
+
+
+"""Utils for reading and writing."""
+
+import json
+import pandas as pd
+import networkx as nx
+from texttable import Texttable
+
+
+# 以表格形式显示参数
+def tab_printer(args):
+    """
+    Function to print the logs in a nice tabular format.
+    :param args: Parameters used for the model.
+    """
+    args = vars(args)
+    keys = sorted(args.keys())
+    t = Texttable()
+    t.add_rows([["Parameter", "Value"]])
+    t.add_rows([[k.replace("_", " ").capitalize(), args[k]] for k in keys])
+    print(t.draw())
+
+def graph_reader(path):
+    """
+    Function to read the graph from the path.
+    :param path: Path to the edge list.
+    :return graph: NetworkX object returned.
+    """
+    graph = nx.from_edgelist(pd.read_csv(path).values.tolist())
+    graph.remove_edges_from(nx.selfloop_edges(graph))
+    return graph
+
+
+def membership_saver(membership_path, membership):
+    """
+    Saving the membership dictionary as a JSON.
+    :param membership_path: Path to save the JSON.
+    :param membership: Membership dictionary with cluster ids.
+    """
+    with open(membership_path, "w") as f:
+        json.dump(membership, f)

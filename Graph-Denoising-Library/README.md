@@ -90,5 +90,5 @@ https://github.com/SJYuCNEL/PRI-Graphs
 
 
 数据集举例：（每个算法至少选择3～5个数据集实现）
-Cora、CiteSeer、Pubmed、Reddit、PPI、Polblogs、FinV、Telecom等
+Cora、CiteSeer、Pubmed、Reddit、PPI、Polblogs、FinV、Telecom、polbooks、等
 更多图相关的数据集可以在https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html中找到

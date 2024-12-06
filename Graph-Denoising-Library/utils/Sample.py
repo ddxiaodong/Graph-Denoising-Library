@@ -6,11 +6,10 @@ import sys,os
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print(BASE)
 sys.path.insert(0, BASE) 
-from utils.DropEdge_utils import sparse_mx_to_torch_sparse_tensor
+from utils.Utils import sparse_mx_to_torch_sparse_tensor
 from data_provider.data_factory import data_loader
 from utils.Normalization import fetch_normalization
 
-# 用于采样图数据的类。
 
 '''
     通过不同采样方式生成子图数据

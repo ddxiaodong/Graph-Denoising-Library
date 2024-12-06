@@ -1,16 +1,18 @@
 import os
 import torch
 
-from models import DropEdge, RGIB
+from models import DropEdge, RGIB, Edmot
 
-# 任务基类  
+
+# 任务基类
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
         # 这里填写已经适配好的模型
         self.model_dict = {
             'DropEdge': DropEdge,
-            'RGIB' : RGIB
+            'RGIB' : RGIB,
+            'Edmot' : Edmot
         }
 
         self.device = self._acquire_device()
@@ -35,7 +37,7 @@ class Exp_Basic(object):
             print('Use CPU')
         return device
 
-    def _get_data(self):
+    def _get_data(self, flag):
         pass
 
     def vali(self):

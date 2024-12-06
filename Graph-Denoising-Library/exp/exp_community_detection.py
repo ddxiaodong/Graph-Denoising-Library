@@ -1,191 +1,230 @@
-# # from data_provider.data_factory import data_provider
+# from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-# # from utils.tools import EarlyStopping, adjust_learning_rate, cal_accuracy
-# import torch
-# import torch.nn as nn
-# from torch import optim
-# import os
-# import time
-# import warnings
-# import numpy as np
-# import pdb
+# from utils.tools import EarlyStopping, adjust_learning_rate, cal_accuracy
+import torch
+import torch.nn as nn
+from torch import optim
+import os
+import time
+import warnings
+import numpy as np
+import pdb
+from data_provider.data_factory import data_loader
+from utils.Sample import Sampler
+from utils.EarlyStopping import EarlyStopping
+import torch.nn.functional as F
+from utils.metric import accuracy, roc_auc_compute_fn
+from torch_geometric.utils import negative_sampling, train_test_split_edges
+from sklearn.metrics import roc_auc_score
 
-# warnings.filterwarnings('ignore')
 
-# 模型创建和其她相同。训练和测试不同
+warnings.filterwarnings('ignore')
+
+
+# 社团检测实验类
 class Exp_Community_Detection(Exp_Basic):
     def __init__(self, args):
         super(Exp_Community_Detection, self).__init__(args)
 
-#     def _build_model(self):
-#         # model input depends on data
-#         train_data, train_loader = self._get_data(flag='TRAIN')
-#         test_data, test_loader = self._get_data(flag='TEST')
-#         self.args.seq_len = max(train_data.max_seq_len, test_data.max_seq_len)
-#         self.args.pred_len = 0
-#         self.args.enc_in = train_data.feature_df.shape[1]
-#         self.args.num_class = len(train_data.class_names)
-#         # model init
-#         model = self.model_dict[self.args.model].Model(self.args).float()
-#         if self.args.use_multi_gpu and self.args.use_gpu:
-#             model = nn.DataParallel(model, device_ids=self.args.device_ids)
-#         return model
+    # 模型构建 这个方法在Basic类的init方法中调用
+    def _build_model(self):
+        # 加载数据集
+        self.args.dataset = self._get_data("train")
+        # 获取数据集中的信息 链路预测需要的信息： edge_index edge_label edge_label_index
+        self.args.edge_index = self.args.dataset['edge_index']
+        self.features = self.args.dataset["features"]
+        # 社团检测的label 有些和节点分类的label一致 如cora
+        self.labels = self.args.dataset["labels"]
+        # # 特征维度 类别维度
+        self.args.nfeat = self.args.dataset["features"].shape[1]
+        self.args.nclass = int(self.args.dataset["labels"].max().item() + 1)
+        self.args.num_nodes = self.args.dataset["num_nodes"]
+        # todo  加载训练和测试集
 
-#     def _get_data(self, flag):
-#         data_set, data_loader = data_provider(self.args, flag)
-#         return data_set, data_loader
+        # model初始化 传入模型名 这里是利用父类的 model_dict
+        model = self.model_dict[self.args.model].Model(self.args).float()
+        # convert to cuda
+        if self.args.cuda:
+            model.cuda()
+        # 下面这里会报错  因为调用_select_optimizer方法时 model尚未返回 需要在train中调用方法定义优化器
+        # self.model_optim = self._select_optimizer()
+        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
 
-#     def _select_optimizer(self):
-#         # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
-#         model_optim = optim.RAdam(self.model.parameters(), lr=self.args.learning_rate)
-#         return model_optim
+        # For the mix mode, lables and indexes are in cuda.
+        if self.args.cuda or self.args.mixmode:
+            self.labels = self.labels.cuda()
+            self.idx_train = self.idx_train.cuda()
+            self.idx_val = self.idx_val.cuda()
+            self.idx_test = self.idx_test.cuda()
+        # warm_start
+        if self.args.warm_start is not None and self.args.warm_start != "":
+            self.early_stopping = EarlyStopping(fname=self.args.warm_start, verbose=False)
+            print("Restore checkpoint from %s" % (self.early_stopping.fname))
+            model.load_state_dict(self.early_stopping.load_checkpoint())
 
-#     def _select_criterion(self):
-#         criterion = nn.CrossEntropyLoss()
-#         return criterion
+        # set early_stopping
+        if self.args.early_stopping > 0:
+            self.early_stopping = EarlyStopping(patience=self.args.early_stopping, verbose=False)
+            print("Model is saving to: %s" % (self.early_stopping.fname))
 
-#     def vali(self, vali_data, vali_loader, criterion):
-#         total_loss = []
-#         preds = []
-#         trues = []
-#         self.model.eval()
-#         with torch.no_grad():
-#             for i, (batch_x, label, padding_mask) in enumerate(vali_loader):
-#                 batch_x = batch_x.float().to(self.device)
-#                 padding_mask = padding_mask.float().to(self.device)
-#                 label = label.to(self.device)
 
-#                 outputs = self.model(batch_x, padding_mask, None, None)
+        return model
 
-#                 pred = outputs.detach().cpu()
-#                 loss = criterion(pred, label.long().squeeze().cpu())
-#                 total_loss.append(loss)
+    def _select_optimizer(self):
+        # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        model_optim = optim.Adam(self.model.parameters(),
+                                 lr=self.args.lr, weight_decay=self.args.weight_decay)
+        # model_optim = optim.RAdam(self.model.parameters(), lr=self.args.learning_rate)
+        return model_optim
 
-#                 preds.append(outputs.detach())
-#                 trues.append(label)
+    # 获取给定优化器的学习率
+    def _get_lr(self, optimizer):
+        for param_group in optimizer.param_groups:
+            return param_group['lr']
 
-#         total_loss = np.average(total_loss)
+    def _get_data(self, flag):
+        return data_loader(self.args)
 
-#         preds = torch.cat(preds, 0)
-#         trues = torch.cat(trues, 0)
-#         probs = torch.nn.functional.softmax(preds)  # (total_samples, num_classes) est. prob. for each class and sample
-#         predictions = torch.argmax(probs, dim=1).cpu().numpy()  # (total_samples,) int class index for each sample
-#         trues = trues.flatten().cpu().numpy()
-#         accuracy = cal_accuracy(predictions, trues)
+    # 训练过程
+    def train(self):
+        # 获取时间、优化器、scheduler、训练数据
+        t_total = time.time()
+        sampling_t = 0
+        model_optim = self._select_optimizer()
+        scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
+        train_edge_index = self.args.dataset['train_edge_index']
+        train_edge_label = self.args.dataset['train_edge_label']
+        train_edge_label_index = self.args.dataset['train_edge_label_index']
+        num_nodes = self.args.dataset['num_nodes']
+        train_index = self.args.dataset['train_index']
+        val_index = self.args.dataset['val_index']
+        val_edge_index = self.args.dataset['val_edge_index']
+        val_edge_label = self.args.dataset['val_edge_label']
+        val_edge_label_index = self.args.dataset['val_edge_label_index']
+        test_index = self.args.dataset['test_index']
 
-#         self.model.train()
-#         return total_loss, accuracy
+        # graph = graph_reader(args.edge_path)
+        # model = EdMot(graph, args.components, args.cutoff)
+        # memberships = model.fit()
+        # membership_saver(args.membership_path, memberships)
 
-#     def train(self, setting):
-#         train_data, train_loader = self._get_data(flag='TRAIN')
-#         vali_data, vali_loader = self._get_data(flag='TEST')
-#         test_data, test_loader = self._get_data(flag='TEST')
+        for epoch in range(self.args.epochs):
+            sampling_t = time.time()
+            # if self.args.mixmode:
+            #     train_adj = train_adj.cuda()
 
-#         path = os.path.join(self.args.checkpoints, setting)
-#         if not os.path.exists(path):
-#             os.makedirs(path)
+            sampling_t = time.time() - sampling_t
+            # (val_adj, val_fea) = self.sampler.get_test_set(normalization=self.args.normalization, cuda=self.args.cuda)
+            # if self.args.mixmode:
+            #     val_adj = val_adj.cuda()
 
-#         time_now = time.time()
+            # 模型训练的核心
+            output = self.model(self.features, self.args.edge_index)
 
-#         train_steps = len(train_loader)
-#         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
+            t = time.time()
+            self.model.train()
+            model_optim.zero_grad()
 
-#         model_optim = self._select_optimizer()
-#         criterion = self._select_criterion()
+            # 计算损失 需要变成链路预测的损失
+            # loss_train = F.nll_loss(output, self.labels[self.idx_train])
+            # acc_train = accuracy(output, self.labels[self.idx_train])
+            # todo 计算了 五个损失
+            # loss1: supervised loss with original graph 监督损失
+            loss_train = criterion(output, self.model.edge_label.float()).mean()
 
-#         for epoch in range(self.args.train_epochs):
-#             iter_count = 0
-#             train_loss = []
+            loss_train.backward()
+            model_optim.step()
+            train_t = time.time() - t
+            val_t = time.time()
+            # We can not apply the fastmode for the reddit dataset.
+            # if sampler.learning_type == "inductive" or not args.fastmode:
 
-#             self.model.train()
-#             epoch_time = time.time()
+            # 改成链路预测早停法的逻辑
+            # if self.args.early_stopping > 0 and self.sampler.dataset != "reddit":
+            #     loss_val = F.nll_loss(output[val_index], self.labels[self.idx_val]).item()
+            #     self.early_stopping(loss_val, self.model)
+            #
 
-#             for i, (batch_x, label, padding_mask) in enumerate(train_loader):
-#                 iter_count += 1
-#                 model_optim.zero_grad()
+            # 验证集的逻辑
+            if not self.args.fastmode:
+                #  Evaluate validation set performance separately,
+                #  deactivates dropout during validation run.
+                self.model.eval()
+                output_val = self.model(self.features, val_edge_index)
+                loss_val = criterion(output_val, self.model.edge_label.float()).mean()
+                acc_val = roc_auc_score(self.model.edge_label.cpu(), output_val.detach().cpu().numpy())
+            else:
+                loss_val = 0
+                acc_val = 0
 
-#                 batch_x = batch_x.float().to(self.device)
-#                 padding_mask = padding_mask.float().to(self.device)
-#                 label = label.to(self.device)
+            if self.args.lradjust:
+                scheduler.step()
 
-#                 outputs = self.model(batch_x, padding_mask, None, None)
-#                 loss = criterion(outputs, label.long().squeeze(-1))
-#                 train_loss.append(loss.item())
+            val_t = time.time() - val_t
+            output = output.view(-1).sigmoid()
+            # 二分类准确率 边存在或缺失
+            acc_train = roc_auc_score(self.model.edge_label.cpu(), output.detach().cpu().numpy())
+            # return (loss_train.item(), acc_train.item(), loss_val, acc_val, get_lr(optimizer), train_t, val_t)
+            outputs = (
+            loss_train.item(), acc_train, loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
+            if self.args.debug and epoch % 1 == 0:
+                print('Epoch: {:04d}'.format(epoch + 1),
+                      'loss_train: {:.4f}'.format(outputs[0]),
+                      'acc_train: {:.4f}'.format(outputs[1]),
+                      'loss_val: {:.4f}'.format(outputs[2]),
+                      'acc_val: {:.4f}'.format(outputs[3]),
+                      'cur_lr: {:.5f}'.format(outputs[4]),
+                      's_time: {:.4f}s'.format(sampling_t),
+                      't_time: {:.4f}s'.format(outputs[5]),
+                      'v_time: {:.4f}s'.format(outputs[6]))
 
-#                 if (i + 1) % 100 == 0:
-#                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
-#                     speed = (time.time() - time_now) / iter_count
-#                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-#                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
-#                     iter_count = 0
-#                     time_now = time.time()
+            # if args.no_tensorboard is False:
+            #     tb_writer.add_scalars('Loss', {'train': outputs[0], 'val': outputs[2]}, epoch)
+            #     tb_writer.add_scalars('Accuracy', {'train': outputs[1], 'val': outputs[3]}, epoch)
+            #     tb_writer.add_scalar('lr', outputs[4], epoch)
+            #     tb_writer.add_scalars('Time', {'train': outputs[5], 'val': outputs[6]}, epoch)
 
-#                 loss.backward()
-#                 nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
-#                 model_optim.step()
+            loss_train = np.zeros((self.args.epochs,))
+            acc_train = np.zeros((self.args.epochs,))
+            loss_val = np.zeros((self.args.epochs,))
+            acc_val = np.zeros((self.args.epochs,))
 
-#             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
-#             train_loss = np.average(train_loss)
-#             vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion)
-#             test_loss, test_accuracy = self.vali(test_data, test_loader, criterion)
+            loss_train[epoch], acc_train[epoch], loss_val[epoch], acc_val[epoch] = outputs[0], outputs[1], outputs[2], \
+            outputs[3]
 
-#             print(
-#                 "Epoch: {0}, Steps: {1} | Train Loss: {2:.3f} Vali Loss: {3:.3f} Vali Acc: {4:.3f} Test Loss: {5:.3f} Test Acc: {6:.3f}"
-#                 .format(epoch + 1, train_steps, train_loss, vali_loss, val_accuracy, test_loss, test_accuracy))
-#             early_stopping(-val_accuracy, self.model, path)
-#             if early_stopping.early_stop:
-#                 print("Early stopping")
-#                 break
+            if self.args.early_stopping > 0 and self.early_stopping.early_stop:
+                print("Early stopping.")
+                self.model.load_state_dict(self.early_stopping.load_checkpoint())
+                break
 
-#         best_model_path = path + '/' + 'checkpoint.pth'
-#         self.model.load_state_dict(torch.load(best_model_path))
+        if self.args.early_stopping > 0:
+            self.model.load_state_dict(self.early_stopping.load_checkpoint())
 
-#         return self.model
+        if self.args.debug:
+            print("Optimization Finished!")
+            print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
-#     def test(self, setting, test=0):
-#         test_data, test_loader = self._get_data(flag='TEST')
-#         if test:
-#             print('loading model')
-#             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+#    test用到的 sampler idx_test labels
+    def test(self):
+        # 取测试数据
+        test_index = self.args.dataset['test_index']
+        test_edge_index = self.args.dataset['test_edge_index']
+        test_edge_label = self.args.dataset['test_edge_label']
+        test_edge_label_index = self.args.dataset['test_edge_label_index']
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
 
-#         preds = []
-#         trues = []
-#         folder_path = './test_results/' + setting + '/'
-#         if not os.path.exists(folder_path):
-#             os.makedirs(folder_path)
+        # 数据转移到cuda训练的逻辑
+        # if self.args.mixmode:
+        #     test_adj = test_adj.cuda()
+        # 进行测试
+        self.model.eval()
+        output_test = self.model(self.features, test_edge_index)
+        loss_test = criterion(output_test, self.model.edge_label.float()).mean()
+        acc_test = roc_auc_score(self.model.edge_label.cpu().numpy(), output_test.detach().cpu().numpy())
+        if self.args.debug:
+            print("Test set results:",
+                  "loss= {:.4f}".format(loss_test.item()),
+                  "accuracy= {:.4f}".format(acc_test.item()))
+            print("accuracy=%.5f" % (acc_test.item()))
 
-#         self.model.eval()
-#         with torch.no_grad():
-#             for i, (batch_x, label, padding_mask) in enumerate(test_loader):
-#                 batch_x = batch_x.float().to(self.device)
-#                 padding_mask = padding_mask.float().to(self.device)
-#                 label = label.to(self.device)
-
-#                 outputs = self.model(batch_x, padding_mask, None, None)
-
-#                 preds.append(outputs.detach())
-#                 trues.append(label)
-
-#         preds = torch.cat(preds, 0)
-#         trues = torch.cat(trues, 0)
-#         print('test shape:', preds.shape, trues.shape)
-
-#         probs = torch.nn.functional.softmax(preds)  # (total_samples, num_classes) est. prob. for each class and sample
-#         predictions = torch.argmax(probs, dim=1).cpu().numpy()  # (total_samples,) int class index for each sample
-#         trues = trues.flatten().cpu().numpy()
-#         accuracy = cal_accuracy(predictions, trues)
-
-#         # result save
-#         folder_path = './results/' + setting + '/'
-#         if not os.path.exists(folder_path):
-#             os.makedirs(folder_path)
-
-#         print('accuracy:{}'.format(accuracy))
-#         file_name='result_classification.txt'
-#         f = open(os.path.join(folder_path,file_name), 'a')
-#         f.write(setting + "  \n")
-#         f.write('accuracy:{}'.format(accuracy))
-#         f.write('\n')
-#         f.write('\n')
-#         f.close()
-#         return

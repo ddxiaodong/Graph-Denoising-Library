@@ -2,6 +2,7 @@
 
 python -u run.py \
     --model RGIB \
+    --debug \
     --gnn_model GCN \
     --num_gnn_layers 4 \
     --dataset Cora \

@@ -4,6 +4,7 @@ python -u run.py \
     --model DropEdge \
     --debug \
     --datapath data/cora \
+    --dataBy classic \
     --seed 42 \
     --dataset cora \
     --model_type mutigcn \

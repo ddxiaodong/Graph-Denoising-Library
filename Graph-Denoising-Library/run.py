@@ -6,13 +6,15 @@ import numpy as np
 from exp.exp_classification import Exp_Classification
 from exp.exp_community_detection import Exp_Community_Detection
 from exp.exp_link_prediction import Exp_Link_Prediction
+from utils.Utils import tab_printer
+
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='GraphDenoising')
     # model name
-    parser.add_argument('--model', type=str, default='DropEdge',
-                        help='model name, options: [DropEdge]')
+    parser.add_argument('--model', type=str, required=True, default='DropEdge',
+                        help='model name, options: [DropEdge, RGIB, Edmot]')
 
     
     
@@ -21,13 +23,15 @@ if __name__ == '__main__':
                         help='Disables CUDA training.')
 
     # todo 需要搞清楚下列训练参数意义
+    # action='store_true' 表示当参数置于命令行时 值置为true
     parser.add_argument('--fastmode', action='store_true', default=False,
                         help='Disable validation during training.')
     parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-    parser.add_argument('--epochs', type=int, default=800,
+    parser.add_argument('--epochs', type=int, default=500,
                         help='Number of epochs to train.')
     parser.add_argument('--lr', type=float, default=0.02,
                         help='Initial learning rate.')
+    # 启动学习率调整
     parser.add_argument('--lradjust', action='store_true',
                         default=False, help='Enable leraning rate adjust.(ReduceLROnPlateau or Linear Reduce)')
     parser.add_argument('--weight_decay', type=float, default=5e-4,
@@ -36,19 +40,27 @@ if __name__ == '__main__':
                         default=False, help="Enable CPU GPU mixing mode.")
     parser.add_argument("--warm_start", default="",
                         help="The model name to be loaded for warm start.")
+    # 命令行包含这个参数时才会显示训练结果
     parser.add_argument('--debug', action='store_true',
                         default=False, help="Enable the detialed training output.")
-    # 数据集
+    # 数据集 （不同模型获取数据集方式不同）
     parser.add_argument('--dataset', default="cora", help="The data set")
     parser.add_argument('--datapath', default="data/cora", help="The data path.")
+    parser.add_argument("--dataBy", default="pyg", help="The way to get data")
+
+
+    # 早停法的耐心系数
     parser.add_argument("--early_stopping", type=int,
                         default=0, help="The patience of earlystopping. Do not adopt the earlystopping when it equals 0.")
+
+    # 一种结果可视化工具 可以适用于多种框架
     parser.add_argument("--no_tensorboard", default=False, help="Disable writing logs to tensorboard")
 
-
+    # 是否是训练状态
     parser.add_argument('--is_training', type=int, default=1, help='status')
+
     # Model parameter 针对不同模型 有不同的模型参数 尽量设定一个默认值
-    # 尽量是双引号
+    # 尽量是双引号  保证不同模型间参数命名不重复 可以把重复的、通用的提到前面去
     # Dropedge参数
     parser.add_argument('--model_type', default="mutigcn",
                         help="Choose the model to be trained.(mutigcn, resgcn, densegcn, inceptiongcn)")
@@ -90,7 +102,18 @@ if __name__ == '__main__':
     parser.add_argument('--search_scheduler',  action='store_true')
     parser.add_argument('--search_iteration', type=int, default=0)
 
+    # Edmot
+    parser.add_argument("--edge-path",nargs="?",default="./input/cora_edges.csv",
+                        help="Edge list csv.")
 
+    parser.add_argument("--membership-path",nargs="?",default="./output/cora_membership.json",
+                        help="Cluster memberhip json.")
+
+    parser.add_argument("--components",type=int,default=2,
+                        help="Number of components. Default is 2.")
+
+    parser.add_argument("--cutoff",type=int,default=50,
+                        help="Minimal overlap cutoff. Default is 50.")
 
     # 实验次数
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
@@ -117,6 +140,9 @@ if __name__ == '__main__':
         print("For the multi-layer gcn model, the aggrmethod is fixed to nores and nhiddenlayers = 1.")
         args.nhiddenlayer = 1
         args.aggrmethod = "nores"
+
+    # 每次运行前打印个表格感觉还挺好看的
+    tab_printer(args)
 
     # random seed setting
     np.random.seed(args.seed)

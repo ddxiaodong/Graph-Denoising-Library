@@ -4,7 +4,7 @@ import torch
 from torch.nn import ModuleList
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
-from utils.RGIB_utils import generate_augmentation_operatorV2
+from utils.Utils import generate_augmentation_operatorV2
 import random
 import math
 

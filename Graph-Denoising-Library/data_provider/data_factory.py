@@ -9,7 +9,7 @@ import torch_geometric.transforms as T
 from torch_geometric.data.remote_backend_utils import num_nodes
 from torch_geometric.datasets import Planetoid, WikipediaNetwork, AttributedGraphDataset
 from utils.Normalization import fetch_normalization, row_normalize # 必须在根目录运行才能识别到
-from utils.DropEdge_utils import sparse_mx_to_torch_sparse_tensor
+from utils.Utils import sparse_mx_to_torch_sparse_tensor
 
 datadir = "data/cora"
 
@@ -150,7 +150,7 @@ def data_loader(args):
     dataset = args.dataset
     task_type = args.task_type
     # 对于传统获取数据的模型在此
-    if args.model == "DropEdge":
+    if args.dataBy == "classic":
         # 特殊的处理
         if args.dataset == "reddit":
             return load_reddit_data(normalization, False, datapath)
@@ -170,7 +170,7 @@ def data_loader(args):
                 "learning_type": learning_type
             }
     # 对于通过框架获取数据在此
-    elif args.model == "RGIB":
+    elif args.dataBy == "pyg" :
         # 如果能直接从pyg框架中获得
         if args.dataset in dataset_dict:
             data = getDatasetByPyg(args.dataset)

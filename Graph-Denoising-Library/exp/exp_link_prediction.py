@@ -77,6 +77,7 @@ class Exp_Link_Prediction(Exp_Basic):
     #     return data_set, data_loader
 
     def _select_optimizer(self):
+        print("Model parameters:", list(self.model.parameters()))
         # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
         model_optim = optim.Adam(self.model.parameters(),
                                  lr=self.args.lr, weight_decay=self.args.weight_decay)
@@ -98,6 +99,7 @@ class Exp_Link_Prediction(Exp_Basic):
         sampling_t = 0
         model_optim = self._select_optimizer()
         scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+        # 二分类任务损失计算
         criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
         train_edge_index = self.args.dataset['train_edge_index']
         train_edge_label = self.args.dataset['train_edge_label']

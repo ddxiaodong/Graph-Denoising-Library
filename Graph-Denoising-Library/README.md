@@ -58,14 +58,14 @@ https://github.com/flyingdoog/PTDNet.
 
 https://github.com/flyingdoog/PTDNet.
 
-10.RGIB——Combating Bilateral Edge Noise for Robust Link Prediction
+10.RGIB——Combating Bilateral Edge Noise for Robust Link Prediction（不可选）
 https://github.com/tmlr-group/RGIB.
 
 11.RisKeeper——Value at Adversarial Risk: A Graph Defense Strategy against Cost-Aware Attacks
 
 12.GRV———Unsupervised Adversarially Robust Representation Learning on Graphs
 
-13.Edmot——EdMot: An Edge Enhancement Approach for Motif-aware Community Detection
+13.Edmot——EdMot: An Edge Enhancement Approach for Motif-aware Community Detection（不可选）
 
 14.RCD——RobustECD: Enhancement of Network Structure for Robust Community Detection
 

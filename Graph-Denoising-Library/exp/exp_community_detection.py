@@ -1,4 +1,6 @@
 # from data_provider.data_factory import data_provider
+from email.policy import default
+
 from exp.exp_basic import Exp_Basic
 # from utils.tools import EarlyStopping, adjust_learning_rate, cal_accuracy
 import torch
@@ -13,7 +15,7 @@ from data_provider.data_factory import data_loader
 from utils.Sample import Sampler
 from utils.EarlyStopping import EarlyStopping
 import torch.nn.functional as F
-from utils.metric import accuracy, roc_auc_compute_fn
+from utils.metric import accuracy, roc_auc_compute_fn, evaluate_community_detection
 from torch_geometric.utils import negative_sampling, train_test_split_edges
 from sklearn.metrics import roc_auc_score
 
@@ -30,6 +32,7 @@ class Exp_Community_Detection(Exp_Basic):
     def _build_model(self):
         # 加载数据集
         self.args.dataset = self._get_data("train")
+        self.args.datasetPyg = self.args.dataset['datasetPyg']
         # 获取数据集中的信息 链路预测需要的信息： edge_index edge_label edge_label_index
         self.args.edge_index = self.args.dataset['edge_index']
         self.features = self.args.dataset["features"]
@@ -71,16 +74,27 @@ class Exp_Community_Detection(Exp_Basic):
         return model
 
     def _select_optimizer(self):
+        print("Model parameters:", list(self.model.parameters()))
         # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
-        model_optim = optim.Adam(self.model.parameters(),
+
+        if not list(self.model.parameters()):
+            print("No model parameters found, return NullOptimizer")
+            model_optim = NullOptimizer()
+        else:
+            model_optim = optim.Adam(self.model.parameters(),
                                  lr=self.args.lr, weight_decay=self.args.weight_decay)
         # model_optim = optim.RAdam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
 
+
     # 获取给定优化器的学习率
     def _get_lr(self, optimizer):
-        for param_group in optimizer.param_groups:
-            return param_group['lr']
+        default_lr = 0
+        if not optimizer.param_groups:
+            return default_lr
+        else:
+            for param_group in optimizer.param_groups:
+                return param_group['lr']
 
     def _get_data(self, flag):
         return data_loader(self.args)
@@ -91,7 +105,8 @@ class Exp_Community_Detection(Exp_Basic):
         t_total = time.time()
         sampling_t = 0
         model_optim = self._select_optimizer()
-        scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
+
+        # scheduler = optim.lr_scheduler.MultiStepLR(model_optim, milestones=[200, 300, 400, 500, 600, 700], gamma=0.5)
         criterion = torch.nn.BCEWithLogitsLoss(reduction='none')
         train_edge_index = self.args.dataset['train_edge_index']
         train_edge_label = self.args.dataset['train_edge_label']
@@ -119,26 +134,26 @@ class Exp_Community_Detection(Exp_Basic):
             # if self.args.mixmode:
             #     val_adj = val_adj.cuda()
 
-            # 模型训练的核心
+            # 这里输出的是每个节点划分到不同的社团列表
             output = self.model(self.features, self.args.edge_index)
+
+            # todo 损失函数 得到的格式不适用于交叉熵损失
+            # loss_fn = nn.CrossEntropyLoss()
+            # loss = loss_fn(output, self.labels)
+            # print(f"Loss: {loss.item()}")
+            loss_train = 0
+            # 输出社团检测各指标，包括ARI NMI Modularity
+            ARI, NMI, Modularity = evaluate_community_detection(output, self.labels)
+
 
             t = time.time()
             self.model.train()
             model_optim.zero_grad()
 
-            # 计算损失 需要变成链路预测的损失
-            # loss_train = F.nll_loss(output, self.labels[self.idx_train])
-            # acc_train = accuracy(output, self.labels[self.idx_train])
-            # todo 计算了 五个损失
-            # loss1: supervised loss with original graph 监督损失
-            loss_train = criterion(output, self.model.edge_label.float()).mean()
-
-            loss_train.backward()
+            # loss_train.backward()
             model_optim.step()
             train_t = time.time() - t
             val_t = time.time()
-            # We can not apply the fastmode for the reddit dataset.
-            # if sampler.learning_type == "inductive" or not args.fastmode:
 
             # 改成链路预测早停法的逻辑
             # if self.args.early_stopping > 0 and self.sampler.dataset != "reddit":
@@ -152,8 +167,8 @@ class Exp_Community_Detection(Exp_Basic):
                 #  deactivates dropout during validation run.
                 self.model.eval()
                 output_val = self.model(self.features, val_edge_index)
-                loss_val = criterion(output_val, self.model.edge_label.float()).mean()
-                acc_val = roc_auc_score(self.model.edge_label.cpu(), output_val.detach().cpu().numpy())
+                loss_val = 0
+                ARI_val, NMI_val, Modularity_val = evaluate_community_detection(output_val, self.labels)
             else:
                 loss_val = 0
                 acc_val = 0
@@ -162,22 +177,24 @@ class Exp_Community_Detection(Exp_Basic):
                 scheduler.step()
 
             val_t = time.time() - val_t
-            output = output.view(-1).sigmoid()
+
             # 二分类准确率 边存在或缺失
-            acc_train = roc_auc_score(self.model.edge_label.cpu(), output.detach().cpu().numpy())
+
             # return (loss_train.item(), acc_train.item(), loss_val, acc_val, get_lr(optimizer), train_t, val_t)
             outputs = (
-            loss_train.item(), acc_train, loss_val, acc_val, self._get_lr(model_optim), train_t, val_t)
+            loss_train, ARI, NMI, loss_val, ARI_val, NMI_val, self._get_lr(model_optim), train_t, val_t)
             if self.args.debug and epoch % 1 == 0:
                 print('Epoch: {:04d}'.format(epoch + 1),
-                      'loss_train: {:.4f}'.format(outputs[0]),
-                      'acc_train: {:.4f}'.format(outputs[1]),
-                      'loss_val: {:.4f}'.format(outputs[2]),
-                      'acc_val: {:.4f}'.format(outputs[3]),
-                      'cur_lr: {:.5f}'.format(outputs[4]),
+                      'loss_train: {:.4f}'.format(loss_train),
+                      'ARI: {:.4f}'.format(ARI),
+                      'NMI: {:.4f}'.format(NMI),
+                      'loss_val: {:.4f}'.format(loss_val),
+                      'ARI_val: {:.4f}'.format(ARI_val),
+                      'NMI_val: {:.4f}'.format(NMI_val),
+                      'cur_lr: {:.5f}'.format(outputs[7]),
                       's_time: {:.4f}s'.format(sampling_t),
-                      't_time: {:.4f}s'.format(outputs[5]),
-                      'v_time: {:.4f}s'.format(outputs[6]))
+                      't_time: {:.4f}s'.format(outputs[8]),
+                      'v_time: {:.4f}s'.format(outputs[7]))
 
             # if args.no_tensorboard is False:
             #     tb_writer.add_scalars('Loss', {'train': outputs[0], 'val': outputs[2]}, epoch)
@@ -220,11 +237,25 @@ class Exp_Community_Detection(Exp_Basic):
         # 进行测试
         self.model.eval()
         output_test = self.model(self.features, test_edge_index)
-        loss_test = criterion(output_test, self.model.edge_label.float()).mean()
-        acc_test = roc_auc_score(self.model.edge_label.cpu().numpy(), output_test.detach().cpu().numpy())
+        loss_test = 0
+        ARI_test, NMI_test, Modularity_test = evaluate_community_detection(output_test, self.labels)
         if self.args.debug:
             print("Test set results:",
-                  "loss= {:.4f}".format(loss_test.item()),
-                  "accuracy= {:.4f}".format(acc_test.item()))
-            print("accuracy=%.5f" % (acc_test.item()))
+                  "loss= {:.4f}".format(loss_test),
+                  "ARI= {:.4f}".format(ARI_test),
+                  "NMI= {:.4f}".format(NMI_test)
+                  )
 
+            print("NMI=%.5f" % (NMI_test))
+
+
+
+class NullOptimizer:
+    def __init__(self):
+        self.param_groups = []
+
+    def step(self):
+        pass  # 空操作，什么都不做
+
+    def zero_grad(self):
+        pass  # 空操作，什么都不做

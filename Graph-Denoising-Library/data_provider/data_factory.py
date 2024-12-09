@@ -174,12 +174,13 @@ def data_loader(args):
         # 如果能直接从pyg框架中获得
         if args.dataset in dataset_dict:
             data = getDatasetByPyg(args.dataset)
-            (adj, features, labels, edge_index, num_nodes, degree, learning_type,
+            (datasetPyg, adj, features, labels, edge_index, num_nodes, degree, learning_type,
              train_index, train_edge_label, train_edge_label_index, train_edge_index,
              val_index, val_edge_label, val_edge_label_index, val_edge_index,
              test_index, test_edge_label, test_edge_label_index, test_edge_index
              ) = data
             return {
+                "datasetPyg": datasetPyg,
                 "adj": adj,
                 "features": features,
                 "labels": labels,
@@ -263,6 +264,7 @@ def getDatasetByPyg(dataset_name, data_path=datadir):
     # return adj, train_adj, features, train_features, labels, train_index, val_index, test_index, degree, learning_type
     (train_data, val_data, test_data) = preprocess_dataset[0]  # 训练验证测试数据
     data = dataset[0] # 整图
+    datasetPyg = data
     edge_index = data.edge_index
     num_nodes = data.num_nodes
     features = data.x
@@ -284,7 +286,7 @@ def getDatasetByPyg(dataset_name, data_path=datadir):
     learning_type = "inductive"
 
     print()
-    return (adj, features, labels, edge_index, num_nodes, degree, learning_type,
+    return (datasetPyg, adj, features, labels, edge_index, num_nodes, degree, learning_type,
             train_index, train_edge_label, train_edge_label_index, train_edge_index,
             val_index, val_edge_label, val_edge_label_index, val_edge_index,
             test_index, test_edge_label, test_edge_label_index, test_edge_index

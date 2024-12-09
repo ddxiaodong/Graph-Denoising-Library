@@ -16,15 +16,18 @@ import community  # For Louvain partitioning (requires python-louvain)
 class Model(nn.Module):
     def __init__(self, configs):
         super().__init__()
-        self.model = EdMot(configs.data, configs.component_count, configs.cutoff)
+        self.model = EdMotPyg(configs.datasetPyg, configs.components, configs.cutoff)
 
-
+    # 这里参数其实传什么都无所谓，数据集作为模型的属性传入了
     def forward(self, x, edge_index):
-        return self.model.fit()
+        output = self.model.fit()
+        # 需要以tensor张量形式返回
+        return torch.tensor(list(output.values()))
 
 
 
 # 改造成pyg思路大致是输入的pyg的数据 通过to_networkx 转换后其他函数不用修改 最后return时再转换回去
+# 使用到的图的信息有：节点邻居信息、边列表、连通分量信息、邻接矩阵
 class EdMotPyg:
     """
     Edge Motif Clustering Class (PyG version).
@@ -35,7 +38,6 @@ class EdMotPyg:
         :param component_count: Number of extract motif hypergraph components.
         :param cutoff: Motif edge cut-off value.
         """
-        self.data = data
         self.graph = to_networkx(data, to_undirected=True)
         self.component_count = component_count
         self.cutoff = cutoff
@@ -55,7 +57,7 @@ class EdMotPyg:
         """
         Enumerating pairwise motif counts.
         """
-        print("\nCalculating overlaps.\n")
+        # print("\nCalculating overlaps.\n")
         edges = [
             e for e in tqdm(self.graph.edges())
             if self._overlap(e[0], e[1]) >= self.cutoff
@@ -67,7 +69,7 @@ class EdMotPyg:
         """
         Extracting connected components from motif graph.
         """
-        print("\nExtracting components.\n")
+        # print("\nExtracting components.\n")
         components = [c for c in nx.connected_components(self.motif_graph)]
         components = [[len(c), c] for c in components]
         components.sort(key=lambda x: x[0], reverse=True)
@@ -80,12 +82,13 @@ class EdMotPyg:
         """
         Filling the dense blocks of the adjacency matrix.
         """
-        print("\nAdding edge blocks.\n")
+        # print("\nAdding edge blocks.\n")
         new_edges = [
             (n_1, n_2) for nodes in self.blocks for n_1 in nodes for n_2 in nodes if n_1 != n_2
         ]
         self.graph.add_edges_from(new_edges)
 
+    # 划分是一个映射字典  {node_id: community_id}
     def fit(self):
         """
         Clustering the target graph.
@@ -98,7 +101,7 @@ class EdMotPyg:
         # Convert modified NetworkX graph back to PyG Data
         self.data = from_networkx(self.graph)
 
-        return partition, self.data
+        return partition
 
 
 class EdMot(object):

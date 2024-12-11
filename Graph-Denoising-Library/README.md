@@ -43,10 +43,10 @@ https://github.com/galina0217/NetRL
 https://github.com/zjunet/E-Net
 
 5.Mask-GVAE——Mask-GVAE: Blind Denoising Graphs via Partition
-
+（肯定有代码）
 
 6.focus——FocusedCleaner: Sanitizing Poisoned Graphs for Robust GNN-Based Node Classification
-
+https://github.com/zhuyulin-tony/focusedcleaner
 
 7.Graph Sanitation——Graph Sanitation with Application to Node Classification
 
@@ -62,33 +62,43 @@ https://github.com/flyingdoog/PTDNet.
 https://github.com/tmlr-group/RGIB.
 
 11.RisKeeper——Value at Adversarial Risk: A Graph Defense Strategy against Cost-Aware Attacks
+https://github.com/songwdfu/RisKeeper
 
 12.GRV———Unsupervised Adversarially Robust Representation Learning on Graphs
 
 13.Edmot——EdMot: An Edge Enhancement Approach for Motif-aware Community Detection（不可选）
+https://github.com/benedekrozemberczki/EdMot
 
 14.RCD——RobustECD: Enhancement of Network Structure for Robust Community Detection
+https://github.com/jjzhou012/RobustECD
 
-15.MetaGC——Robust Graph Clustering via Meta Weighting for Noisy Graphs
+15.MetaGC——Robust Graph Clustering via Meta Weighting for Noisy Graphs（不可选）
 https://github.com/HyeonsooJo/MetaGC
 
-16.DWSSA——Alleviating over-smoothness for deep Graph Neural Networks
+16.DWSSA——Alleviating over-smoothness for deep Graph Neural Networks（无代码）
 
 17.BGAT-CCRF——BGAT-CCRF: A novel end-to-end model for knowledge graph noise correction
 
 18.RGLC——Rethinking the impact of noisy labels in graph classification: A utility and privacy
 perspective
+https://github.com/LDer66/RGLC
 
 19.Jaccard——Adversarial examples on graph data: Deep insights into attack and defense
+（肯定有代码）
 
 20.RIB——Graph Information Bottleneck
+https://github.com/snap-stanford/GIB
 
 21.VIB——Graph Structure Learning with Variational Information Bottleneck
+https://github.com/RingBDStack/VIB-GSL
 
 22.PRI——Principle of relevant information for graph sparsiﬁcation
 https://github.com/SJYuCNEL/PRI-Graphs
 
+23.DropEdge——DropEdge：TOWARDS DEEP GRAPH CONVOLUTIONAL NETWORKS ON NODE CLASSIFICATION（不可选）
+https://github.com/DropEdge/DropEdge.
+
 
 数据集举例：（每个算法至少选择3～5个数据集实现）
-Cora、CiteSeer、Pubmed、Reddit、PPI、Polblogs、FinV、Telecom、polbooks、等
+Cora、CiteSeer、Pubmed、Reddit、PPI、Polblogs、FinV、Telecom、polbooks等
 更多图相关的数据集可以在https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html中找到

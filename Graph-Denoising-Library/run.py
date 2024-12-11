@@ -45,7 +45,9 @@ if __name__ == '__main__':
                         default=False, help="Enable the detialed training output.")
     # 数据集 （不同模型获取数据集方式不同）
     parser.add_argument('--dataset', default="cora", help="The data set")
-    parser.add_argument('--datapath', default="data/cora", help="The data path.")
+    parser.add_argument('--datapath', default=None,
+                        help="The data path (will be overridden based on dataset if not specified)")
+
     parser.add_argument("--dataBy", default="pyg", help="The way to get data")
 
 
@@ -124,6 +126,12 @@ if __name__ == '__main__':
     # pre setting
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     args.mixmode = args.no_cuda and args.mixmode and torch.cuda.is_available()
+
+    if args.datapath is None:
+        # 构建数据路径，这里假设所有数据集都存放在 "data/" 目录下
+        base_data_path = "data/"
+        args.datapath = os.path.join(base_data_path, args.dataset)
+
     # 以下属于dropedge的特定操作 但作为命令行参数其实可以允许有冗余部分
     if args.aggrmethod == "default":
         if args.model_type == "resgcn":

@@ -11,6 +11,7 @@ from torch_geometric.datasets import Planetoid, WikipediaNetwork, AttributedGrap
 from utils.Normalization import fetch_normalization, row_normalize # 必须在根目录运行才能识别到
 from utils.Utils import sparse_mx_to_torch_sparse_tensor
 
+
 datadir = "data/cora"
 
 # 原始加载数据集的方式  分为加载引文数据集和其她类型数据集
@@ -143,7 +144,7 @@ def data_loader(args):
         考虑根据传参的模型采用不同的获取数据集方法
     '''
 # dataset, datapath=datadir, normalization="AugNormAdj", porting_to_torch=True, task_type = "full")
-    dataset_dict = ["Cora", "CiteSeer", "PubMed"]
+    dataset_dict = ["Cora", "Citeseer", "Pubmed"]
     normalization="AugNormAdj"
     datapath = args.datapath
     porting_to_torch=False
@@ -173,7 +174,7 @@ def data_loader(args):
     elif args.dataBy == "pyg" :
         # 如果能直接从pyg框架中获得
         if args.dataset in dataset_dict:
-            data = getDatasetByPyg(args.dataset)
+            data = getDatasetByPyg(args.dataset, args.datapath)
             (datasetPyg, adj, features, labels, edge_index, num_nodes, degree, learning_type,
              train_index, train_edge_label, train_edge_label_index, train_edge_index,
              val_index, val_edge_label, val_edge_label_index, val_edge_index,
